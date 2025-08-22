@@ -5,6 +5,10 @@ export type Transaction = {
   category: string;
   method: string;
   notes?: string;
+  installmentTotal?: number;
+  installmentCurrent?: number;
+  isSubscription?: boolean;
+  subscriptionInterval?: "weekly" | "monthly" | "yearly";
 };
 
 export type Category = {
