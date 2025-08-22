@@ -12,3 +12,10 @@ export type Category = {
   name: string;
   type: "expense" | "income";
 };
+
+export type Filters = {
+  category: string;
+  month: string;
+  year: string;
+  search: string;
+};
