@@ -5,47 +5,69 @@ import { Transaction } from "@/types";
 
 export function useTransactions() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [isLoaded, setIsLoaded] = useState<boolean>(false);
 
   useEffect(() => {
-    const saved = localStorage.getItem("transactions");
-    console.log("Loaded transactions from localStorage:", saved);
-    if (saved) {
+    async function fetchTransactions() {
       try {
-        setTransactions(JSON.parse(saved));
-      } catch (e) {
-        console.error("Failed to parse transactions from localStorage:", e);
-        setTransactions([]);
+        const res = await fetch("/api/transactions");
+        const data = await res.json();
+        if (res.ok) {
+          setTransactions(data);
+        } else {
+          console.error("Failed to fetch transactions:", data.error);
+        }
+      } catch (err) {
+        console.error("Error loading transactions:", err);
+      } finally {
+        setIsLoaded(true);
       }
     }
+
+    fetchTransactions();
   }, []);
 
-  const [isLoaded, setIsLoaded] = useState(false);
+  const addTransaction = async (t: Transaction) => {
+    try {
+      const res = await fetch("/api/transactions/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(t),
+      });
 
-  useEffect(() => {
-    const saved = localStorage.getItem("transactions");
-    console.log("Loaded transactions from localStorage:", saved);
-    if (saved) {
-      try {
-        setTransactions(JSON.parse(saved));
-      } catch (e) {
-        console.error("Failed to parse transactions from localStorage:", e);
-        setTransactions([]);
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setTransactions((prev) => [...prev, { ...t }]);
+      } else {
+        console.error("Failed to add transaction:", data.error);
       }
+    } catch (err) {
+      console.error("Error adding transaction:", err);
     }
-    setIsLoaded(true);
-  }, []);
-
-  useEffect(() => {
-    if (isLoaded) {
-      console.log("Saving transactions to localStorage:", transactions);
-      localStorage.setItem("transactions", JSON.stringify(transactions));
-    }
-  }, [transactions, isLoaded]);
-
-  const addTransaction = (t: Transaction) => {
-    console.log("Adding transaction:", t);
-    setTransactions((prev) => [...prev, t]);
   };
 
-  return { transactions, addTransaction };
+  const deleteTransaction = async (id: string) => {
+    try {
+      const res = await fetch(`/api/transactions/delete`, {
+        method: "POST",
+        body: JSON.stringify({
+          id: id,
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setTransactions((prev) => 
+          prev.filter((transaction) => transaction.id !== id)
+        );
+        return true;
+      } else {
+        console.error("Failed to delete transaction:", data.error);
+      }
+    } catch (err) {
+      console.error("Error deleting transaction:", err);
+    }
+  };
+
+  return { transactions, addTransaction, deleteTransaction, isLoaded };
 }

@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 
 export async function GET() {
   try {
-    const [rows] = await db.query("SELECT * FROM transactions ORDER BY date DESC");
+    const [rows] = await db.query("SELECT * FROM transactions ORDER BY created_at DESC");
     return NextResponse.json(rows);
   } catch (err) {
     console.error(err);
