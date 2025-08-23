@@ -2,13 +2,17 @@
 
 import { useState } from "react";
 import { Transaction } from "@/types";
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import dayjs, { Dayjs } from "dayjs";
 
 type Props = {
   onSubmit: (t: Transaction) => void;
 };
 
 export default function TransactionForm({ onSubmit }: Props) {
-  const [date, setDate] = useState("");
+  const [date, setDate] = useState<Dayjs | null>(dayjs());
   const [amount, setAmount] = useState<number>(0);
   const [category, setCategory] = useState("Food");
   const [method, setMethod] = useState("Cash");
@@ -23,7 +27,7 @@ export default function TransactionForm({ onSubmit }: Props) {
     e.preventDefault();
     const newTransaction: Transaction = {
       id: crypto.randomUUID(),
-      date,
+      date: date ? date.format("YYYY-MM-DD") : "",
       amount,
       category,
       method,
@@ -48,7 +52,18 @@ export default function TransactionForm({ onSubmit }: Props) {
     >
       <label>
         Date:
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+        <LocalizationProvider dateAdapter={AdapterDayjs}>
+          <DatePicker 
+            defaultValue={dayjs()} 
+            value={date}
+            onChange={(e) => setDate(e)}
+            slotProps={{
+              textField: {
+                helperText: 'MM/DD/YYYY',
+              },
+            }} 
+          />
+        </LocalizationProvider>
       </label>
 
       <label>
