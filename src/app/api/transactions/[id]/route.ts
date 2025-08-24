@@ -50,3 +50,21 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     return NextResponse.json({ error: "Failed to delete transaction" }, { status: 500 });
   }
 }
+
+
+export async function GET(_: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    const { id } = params;
+    const [rows] = await db.query("SELECT * FROM transactions WHERE id=?", [id]);
+    const record = Array.isArray(rows) ? rows[0] : null;
+
+    if (!record) {
+      return NextResponse.json({ error: "Transaction not found" }, { status: 404 });
+    }
+
+    return NextResponse.json({ data: record, success: true });
+  } catch (err) {
+    console.error(err);
+    return NextResponse.json({ error: "Failed to fetch transaction" }, { status: 500 });
+  }
+}

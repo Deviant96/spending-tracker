@@ -8,7 +8,7 @@ import { Filters, Transaction } from "@/types";
 import TransactionFilters from "@/components/TransactionFilters";
 
 export default function TransactionsPage() {
-  const { transactions, deleteTransaction, isLoaded } = useTransactions();
+  const { transactions, updateTransaction, deleteTransaction, isLoaded } = useTransactions();
 
   const [filters, setFilters] = useState<Filters>({
     category: "all",
@@ -44,7 +44,12 @@ export default function TransactionsPage() {
       />
 
       <Link href="/transactions/add">+ Add Transaction</Link>
-      <TransactionList transactions={filtered} onDelete={deleteTransaction} isLoaded={isLoaded} />
+      <TransactionList 
+        transactions={filtered} 
+        onDelete={deleteTransaction}
+        onEdit={updateTransaction}
+        isLoaded={isLoaded} 
+      />
     </main>
   );
 }
