@@ -34,6 +34,8 @@ export default function TransactionList({ transactions, onDelete, onEdit, isLoad
     }
   }
 
+  console.log(transactions);
+
   const handleDialogDeleteOpen = (id: string) => {
     setTransactionToDelete(id);
     setDialogDeleteOpen(true);
@@ -134,9 +136,13 @@ export default function TransactionList({ transactions, onDelete, onEdit, isLoad
                 )}
               </td>
               <td style={{ borderBottom: "1px solid #eee", padding: "0.5rem" }}>
-                {t.isSubscription && (
+                {t.isSubscription === true && (
                   <div>
                     Subscription {t.subscriptionInterval ?  ` (${t.subscriptionInterval})` : ""}
+                  </div>
+                ) || (
+                  <div style={{ color: "rgb(0, 0, 0, 0.35)" }}>
+                    No
                   </div>
                 )}
               </td>

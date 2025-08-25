@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Transaction } from "@/types";
+import { toCamelCase } from "@/utils/toCamelCase";
 
 export function useTransactions() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -13,7 +14,7 @@ export function useTransactions() {
         const res = await fetch("/api/transactions");
         const data = await res.json();
         if (res.ok) {
-          setTransactions(data);
+          setTransactions(data.map(toCamelCase));
         } else {
           console.error("Failed to fetch transactions:", data.error);
         }
