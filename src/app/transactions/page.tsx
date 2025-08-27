@@ -27,7 +27,7 @@ export default function TransactionsPage() {
     const matchSearch =
       filters.search === "" ||
       t.notes?.toLowerCase().includes(filters.search.toLowerCase()) ||
-      t.category.toLowerCase().includes(filters.search.toLowerCase());
+      (t.category && t.category.toLowerCase().includes(filters.search.toLowerCase()));
 
     return matchCategory && matchMonth && matchYear && matchSearch;
   });
@@ -39,7 +39,7 @@ export default function TransactionsPage() {
       <TransactionFilters
         filters={filters}
         setFilters={setFilters}
-        categories={Array.from(new Set(transactions.map(t => t.category)))}
+        categories={Array.from(new Set(transactions.map(t => t.category).filter(cat => cat !== undefined))) }
         years={years}
       />
 

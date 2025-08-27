@@ -2,8 +2,10 @@ export type Transaction = {
   id: string;
   date: string;
   amount: number;
-  category: string;
-  method: string;
+  category?: string;
+  categoryId?: string;
+  methodId: string;
+  method?: string;
   notes?: string;
   installmentTotal?: number;
   installmentCurrent?: number;
@@ -14,7 +16,11 @@ export type Transaction = {
 export type Category = {
   id: string;
   name: string;
-  type: "expense" | "income";
+};
+
+export type PaymentMethod = {
+  id: string;
+  name: string;
 };
 
 export type Filters = {

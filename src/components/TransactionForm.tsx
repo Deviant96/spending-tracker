@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Transaction } from "@/types";
+import { Category, PaymentMethod, Transaction } from "@/types";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
@@ -14,14 +14,16 @@ type Props = {
 };
 
 export default function TransactionForm({ onSubmit, initialTransaction }: Props) {
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [form, setForm] = useState({
     id: initialTransaction?.id ?? crypto.randomUUID(),
     date: initialTransaction?.date
       ? dayjs(initialTransaction.date)
       : dayjs(),
     amount: initialTransaction?.amount ?? 0,
-    category: initialTransaction?.category ?? "Food",
-    method: initialTransaction?.method ?? "Cash",
+    categoryId: initialTransaction?.categoryId ?? "",
+    methodId: initialTransaction?.methodId ?? "",
     notes: initialTransaction?.notes ?? "",
     isInstallment:
       !!initialTransaction?.installmentTotal ||
@@ -32,15 +34,31 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
     subscriptionInterval: initialTransaction?.subscriptionInterval ?? undefined,
   });
 
+  const fetchCategories = async () => {
+    // Fetch categories from the API or any other source
+    const response = await fetch("/api/categories");
+    const data = await response.json();
+    setCategories(data);
+  }
+
+  const fetchPaymentMethods = async () => {
+    const response = await fetch("/api/payment-methods");
+    const data = await response.json();
+    setPaymentMethods(data);
+  };
+
   useEffect(() => {
+    fetchCategories();
+    fetchPaymentMethods();
+    
     if (initialTransaction) {
       setForm({
         id: initialTransaction.id,
         date: dayjs(initialTransaction.date),
         amount: initialTransaction.amount,
-        category: initialTransaction.category,
-        method: initialTransaction.method,
-        notes: initialTransaction.notes,
+        categoryId: initialTransaction.categoryId ?? "",
+        methodId: initialTransaction.methodId ?? "",
+        notes: initialTransaction.notes ?? "",
         isInstallment:
           !!initialTransaction.installmentTotal ||
           !!initialTransaction.installmentCurrent,
@@ -114,22 +132,22 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
       <label>
         Category:
         <select
-          value={form.category ?? ""}
-          onChange={(e) => handleChange("category", e.target.value)}
+          value={form.categoryId ?? ""}
+          onChange={(e) => handleChange("categoryId", e.target.value)}
         >
-          <option>Food</option>
-          <option>Transport</option>
-          <option>Shopping</option>
-          <option>Subscriptions</option>
-          <option>Other</option>
+          {categories.map((category: Category) => (
+            <option key={category.id} value={category.id}>
+              {category.name}
+            </option>
+          ))}
         </select>
       </label>
 
       <label>
         Payment Method:
         <select
-          value={form.method ?? ""}
-          onChange={(e) => handleChange("method", e.target.value)}
+          value={form.methodId ?? ""}
+          onChange={(e) => handleChange("methodId", e.target.value)}
         >
           <option>Cash</option>
           <option>Card</option>

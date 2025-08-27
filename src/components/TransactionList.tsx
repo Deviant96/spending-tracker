@@ -131,7 +131,7 @@ export default function TransactionList({ transactions, onDelete, onEdit, isLoad
               <td style={{ borderBottom: "1px solid #eee", padding: "0.5rem" }}>
                 {t.installmentTotal && t.installmentCurrent && (
                   <div>
-                    Installment {t.installmentCurrent} of {t.installmentTotal}
+                    {t.installmentCurrent} of {t.installmentTotal}
                   </div>
                 )}
               </td>
