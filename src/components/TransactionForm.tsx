@@ -76,7 +76,7 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
     e.preventDefault();
     const transaction: Transaction = {
       ...form,
-      date: form.date || "", // Ensure date is a string
+      date: form.date || "",
     };
     onSubmit(transaction);
   };
