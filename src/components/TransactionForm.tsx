@@ -32,13 +32,13 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
 
   const fetchCategories = async () => {
     const response = await fetch("/api/categories");
-    const data = await response.json();
+    const { data } = await response.json();
     setCategories(data);
   }
 
   const fetchPaymentMethods = async () => {
     const response = await fetch("/api/payment-methods");
-    const data = await response.json();
+    const { data } = await response.json();
     setPaymentMethods(data);
   };
 
@@ -141,10 +141,11 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
           value={form.methodId ?? ""}
           onChange={(e) => handleChange("methodId", e.target.value)}
         >
-          <option>Cash</option>
-          <option>Card</option>
-          <option>Wallet</option>
-          <option>Bank Transfer</option>
+          {paymentMethods.map((method: PaymentMethod) => (
+            <option key={method.id} value={method.id}>
+              {method.name}
+            </option>
+          ))}
         </select>
       </label>
 
