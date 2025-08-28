@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db"; // adjust path
+import { db } from "@/lib/db";
 
-// GET all methods
 export async function GET() {
   try {
     const [rows] = await db.query("SELECT id, name FROM payment_methods ORDER BY name ASC");
@@ -12,7 +11,6 @@ export async function GET() {
   }
 }
 
-// POST create method
 export async function POST(req: NextRequest) {
   try {
     const { name } = await req.json();
