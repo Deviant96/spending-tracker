@@ -2,10 +2,6 @@
 
 import { useState, useEffect } from "react";
 import { Category, PaymentMethod, Transaction } from "@/types";
-import { DatePicker } from "@mui/x-date-pickers/DatePicker";
-import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
-import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
-import dayjs, { Dayjs } from "dayjs";
 import { formatToRupiah } from "@/utils/currency";
 
 type Props = {
@@ -19,8 +15,8 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
   const [form, setForm] = useState({
     id: initialTransaction?.id ?? crypto.randomUUID(),
     date: initialTransaction?.date
-      ? dayjs(initialTransaction.date)
-      : dayjs(),
+      ? initialTransaction.date
+      : null,
     amount: initialTransaction?.amount ?? 0,
     categoryId: initialTransaction?.categoryId ?? "",
     methodId: initialTransaction?.methodId ?? "",
@@ -35,7 +31,6 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
   });
 
   const fetchCategories = async () => {
-    // Fetch categories from the API or any other source
     const response = await fetch("/api/categories");
     const data = await response.json();
     setCategories(data);
@@ -54,7 +49,7 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
     if (initialTransaction) {
       setForm({
         id: initialTransaction.id,
-        date: dayjs(initialTransaction.date),
+        date: initialTransaction.date,
         amount: initialTransaction.amount,
         categoryId: initialTransaction.categoryId ?? "",
         methodId: initialTransaction.methodId ?? "",
@@ -72,7 +67,7 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
 
   const handleChange = (
     key: keyof typeof form,
-    value: string | number | boolean | Dayjs | undefined
+    value: string | number | boolean | undefined
   ) => {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
@@ -81,7 +76,7 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
     e.preventDefault();
     const transaction: Transaction = {
       ...form,
-      date: form.date ? form.date.format("YYYY-MM-DD") : "",
+      date: form.date || "", // Ensure date is a string
     };
     onSubmit(transaction);
   };
@@ -98,15 +93,12 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
     >
       <label>
         Date:
-        <LocalizationProvider dateAdapter={AdapterDayjs}>
-          <DatePicker
-            value={form.date ?? ""}
-            onChange={(val) => handleChange("date", val || dayjs())}
-            slotProps={{
-              textField: { helperText: "MM/DD/YYYY" },
-            }}
-          />
-        </LocalizationProvider>
+        <input
+          type="date"
+          value={form.date || ""}
+          onChange={(e) => handleChange("date", e.target.value)}
+          required
+        />
       </label>
 
       <label>
