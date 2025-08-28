@@ -26,10 +26,12 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable}`}>
+      <body className={`${geistSans.variable} ${geistMono.variable} min-h-screen mx-auto`}>
         <Navigation />
-        <Breadcrumbs />
-        {children}
+        <div className="container mx-auto p-4 ">
+          <Breadcrumbs />
+          {children}
+        </div>
       </body>
     </html>
   );
