@@ -10,8 +10,8 @@ export function CsvPreview({ preview, handleImport, loading }: { preview: any[];
         <tr>
           <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b">Date</th>
           <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b">Amount</th>
-          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b">Category</th>
-          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b">Method</th>
+          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b">Category ID</th>
+          <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b">Method ID</th>
           <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b">Notes</th>
           <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b">Installment</th>
           <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-b">Subscription</th>
@@ -22,8 +22,8 @@ export function CsvPreview({ preview, handleImport, loading }: { preview: any[];
           <tr key={idx} className="hover:bg-gray-50">
             <td className="px-4 py-2 text-sm text-gray-900">{tx.date}</td>
             <td className="px-4 py-2 text-sm text-gray-900 font-medium">{tx.amount}</td>
-            <td className="px-4 py-2 text-sm text-gray-900">{tx.category}</td>
-            <td className="px-4 py-2 text-sm text-gray-900">{tx.method}</td>
+            <td className="px-4 py-2 text-sm text-gray-900">{tx.categoryId}</td>
+            <td className="px-4 py-2 text-sm text-gray-900">{tx.methodId}</td>
             <td className="px-4 py-2 text-sm text-gray-500">{tx.notes}</td>
             <td className="px-4 py-2 text-sm text-gray-900">
             {tx.installmentCurrent
