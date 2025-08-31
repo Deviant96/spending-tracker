@@ -10,14 +10,14 @@ export async function POST(req: NextRequest) {
     for (const r of transactions) {
       await db.query(
         `INSERT INTO transactions 
-        (id, date, amount, category, method, notes, installment_total, installment_current, is_subscription, subscription_interval) 
+        (id, date, amount, category_id, method_id, notes, installment_total, installment_current, is_subscription, subscription_interval) 
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           randomUUID(),
           r.date,
           Number(r.amount),
-          r.category,
-          r.method,
+          r.categoryId,
+          r.methodId,
           r.notes || null,
           r.installmentTotal ? Number(r.installmentTotal) : null,
           r.installmentCurrent ? Number(r.installmentCurrent) : null,
