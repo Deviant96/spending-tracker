@@ -1,6 +1,9 @@
 "use client";
 
 import { Filters } from "@/types";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import { FormControl, FormField } from "./ui/form";
+import { Input } from "./ui/input";
 
 type Props = {
   filters: Filters;
@@ -10,45 +13,84 @@ type Props = {
 };
 
 export default function TransactionFilters({ filters, setFilters, categories, years }: Props) {
+  console.log(categories);
   return (
     <div style={{ marginBottom: "1rem", display: "flex", gap: "1rem" }}>
       {/* Category Filter */}
-      <select
-        value={filters.category}
-        onChange={e => setFilters({ ...filters, category: e.target.value })}
-      >
-        <option value="all">All Categories</option>
-        {categories.map(cat => (
-          <option key={cat} value={cat}>{cat}</option>
-        ))}
-      </select>
+      <div className="flex flex-row flex-nowrap items-center gap-2.5">
+        <label htmlFor="category" className="font-semibold">Category:</label>
+        <Select
+          onValueChange={value => setFilters({ ...filters, category: value })}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="All" />
+          </SelectTrigger>
+          <SelectContent>
+            <>
+              <SelectItem value="all">
+                All
+              </SelectItem>
+              {categories.map(cat => (
+                <SelectItem key={cat} value={cat}>
+                  {cat}
+                </SelectItem>
+              ))}
+            </>
+          </SelectContent>
+        </Select>
+      </div>
 
       {/* Month Filter */}
-      <select
-        value={filters.month}
-        onChange={e => setFilters({ ...filters, month: e.target.value })}
-      >
-        <option value="all">All Months</option>
-        {Array.from({ length: 12 }).map((_, i) => (
-          <option key={i + 1} value={i + 1}>
-            {new Date(0, i).toLocaleString("default", { month: "long" })}
-          </option>
-        ))}
-      </select>
+      <div className="flex flex-row flex-nowrap items-center gap-2.5">
+        <label htmlFor="month" className="font-semibold">Month:</label>
+        <Select
+          onValueChange={value => setFilters({ ...filters, month: value })}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="All" />
+          </SelectTrigger>
+          <SelectContent>
+            <>
+              <SelectItem value="all">
+                All
+              </SelectItem>
+              {Array.from({ length: 12 }).map((_, i) => (
+                <SelectItem key={i + 1} value={(i + 1).toString()}>
+                  {new Date(0, i).toLocaleString("default", { month: "long" })}
+                </SelectItem>
+              ))}
+            </>
+          </SelectContent>
+        </Select>
+      </div>
 
       {/* Year Filter */}
-      <select
-        value={filters.year}
-        onChange={e => setFilters({ ...filters, year: e.target.value })}
-      >
-        <option value="all">All Years</option>
-        {years.map(y => (
-          <option key={y} value={y}>{y}</option>
-        ))}
-      </select>
+      <div className="flex flex-row flex-nowrap items-center gap-2.5">
+        <label htmlFor="year" className="font-semibold">Year:</label>
+        <Select
+          value={filters.year ?? "all"}
+          onValueChange={value => setFilters({ ...filters, year: value })}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="All" />
+          </SelectTrigger>
+          <SelectContent>
+            <>
+              <SelectItem value="all">
+                All Years
+              </SelectItem>
+              {years.map(y => (
+                <SelectItem key={y} value={y.toString()}>
+                  {y}
+                </SelectItem>
+              ))}
+            </>
+          </SelectContent>
+        </Select>
+      </div>
 
       {/* Search Filter */}
-      <input
+      <Input
         type="text"
         placeholder="Search..."
         value={filters.search}

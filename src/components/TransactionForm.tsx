@@ -25,8 +25,8 @@ const transactionSchema = z.object({
   id: z.string().uuid(),
   date: z.string().nullable(),
   amount: z.number().min(1, "Amount must be greater than 0"),
-  categoryId: z.string().nonempty("Category is required"),
-  methodId: z.string().nonempty("Payment method is required"),
+  category: z.string().nonempty("Category is required"),
+  method: z.string().nonempty("Payment method is required"),
   notes: z.string().optional(),
   isInstallment: z.boolean(),
   installmentTotal: z.number().optional(),
@@ -64,9 +64,9 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
       id: initialTransaction?.id ?? crypto.randomUUID(),
       date: initialTransaction?.date ?? null,
       amount: initialTransaction?.amount ?? 0,
-      categoryId: initialTransaction?.categoryId ?? "",
-      methodId: initialTransaction?.methodId ?? "",
-      notes: initialTransaction?.notes ?? "",
+      category: initialTransaction?.category ?? undefined,
+      method: initialTransaction?.method ?? undefined,
+      notes: initialTransaction?.notes ?? undefined,
       isInstallment:
         !!initialTransaction?.installmentTotal ||
         !!initialTransaction?.installmentCurrent,
@@ -181,14 +181,14 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
 
       {/* Category */}
       <div className="flex flex-col gap-2">
-        <Label htmlFor="categoryId">Category</Label>
+        <Label htmlFor="category">Category</Label>
         <Controller
-          name="categoryId"
+          name="category"
           control={control}
           render={({ field }) => (
             <Select 
               onValueChange={field.onChange} 
-              defaultValue={field.value}
+              defaultValue={field.value?.toString()}
             >
               {isLoadingCategories ? (
                 <Skeleton className="h-[36px] w-full rounded-full" />
@@ -199,7 +199,7 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
                 </SelectTrigger>
                 <SelectContent>
                   {categories.map((category) => (
-                    <SelectItem key={category.id} value={category.id}>
+                    <SelectItem key={category.id} value={category.id.toFixed()}>
                       {category.name}
                     </SelectItem>
                   ))}
@@ -209,17 +209,17 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
             </Select>
           )}
         />
-        {errors.categoryId && <span>{errors.categoryId.message}</span>}
+        {errors.category && <span>{errors.category.message}</span>}
       </div>
 
       {/* Payment Method */}
       <div className="flex flex-col gap-2">
-        <Label htmlFor="methodId">Payment Method</Label>
+        <Label htmlFor="method">Payment Method</Label>
         <Controller
-          name="methodId"
+          name="method"
           control={control}
           render={({ field }) => (
-            <Select onValueChange={field.onChange} defaultValue={field.value}>
+            <Select onValueChange={field.onChange} defaultValue={(field.value ?? "").toString()}>
               <SelectTrigger>
                 <SelectValue placeholder="Select a payment method" />
               </SelectTrigger>
@@ -233,7 +233,7 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
             </Select>
           )}
         />
-        {errors.methodId && <span>{errors.methodId.message}</span>}
+        {errors.method && <span>{errors.method.message}</span>}
       </div>
 
       {/* Notes */}

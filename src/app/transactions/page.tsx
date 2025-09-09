@@ -6,10 +6,13 @@ import { useTransactions } from "@/hooks/useTransactions";
 import { useState } from "react";
 import { Filters, Transaction } from "@/types";
 import TransactionFilters from "@/components/TransactionFilters";
+import { useCategories } from "@/hooks/useCategories";
 
 export default function TransactionsPage() {
   const { transactions, updateTransaction, deleteTransaction, isLoaded } = useTransactions();
+  const { categories } = useCategories();
 
+  console.log("Categhories", categories);
   const [filters, setFilters] = useState<Filters>({
     category: "all",
     month: "all",
@@ -27,7 +30,7 @@ export default function TransactionsPage() {
     const matchSearch =
       filters.search === "" ||
       t.notes?.toLowerCase().includes(filters.search.toLowerCase()) ||
-      (t.category && t.category.toLowerCase().includes(filters.search.toLowerCase()));
+      (t.category && categories.find(cat => cat.name === t.category)?.name.toLowerCase().includes(filters.search.toLowerCase()));
 
     return matchCategory && matchMonth && matchYear && matchSearch;
   });
@@ -39,7 +42,7 @@ export default function TransactionsPage() {
       <TransactionFilters
         filters={filters}
         setFilters={setFilters}
-        categories={Array.from(new Set(transactions.map(t => t.category).filter(cat => cat !== undefined))) }
+        categories={categories.map(c => c.name)}
         years={years}
       />
 

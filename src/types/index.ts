@@ -3,8 +3,6 @@ export type Transaction = {
   date: string;
   amount: number;
   category?: string;
-  categoryId?: string;
-  methodId: string;
   method?: string;
   notes?: string;
   installmentTotal?: number;
@@ -14,7 +12,7 @@ export type Transaction = {
 };
 
 export type Category = {
-  id: string;
+  id: number;
   name: string;
 };
 
@@ -24,8 +22,8 @@ export type PaymentMethod = {
 };
 
 export type Filters = {
-  category: string;
+  category: string | null;
   month: string;
-  year: string;
+  year: string | null;
   search: string;
 };

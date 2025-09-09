@@ -30,8 +30,6 @@ export default function TransactionList({ transactions, onDelete, onEdit, isLoad
     }
   }
 
-  console.log(transactions);
-
   const handleDialogDeleteOpen = (id: string) => {
     setTransactionToDelete(id);
     setDialogDeleteOpen(true);
@@ -113,7 +111,7 @@ export default function TransactionList({ transactions, onDelete, onEdit, isLoad
             <th style={{ borderBottom: "1px solid #ccc", padding: "0.5rem" }}>Date</th>
             <th style={{ borderBottom: "1px solid #ccc", padding: "0.5rem" }}>Amount</th>
             <th style={{ borderBottom: "1px solid #ccc", padding: "0.5rem" }}>Category</th>
-            <th style={{ borderBottom: "1px solid #ccc", padding: "0.5rem" }}>Method</th>
+            <th style={{ borderBottom: "1px solid #ccc", padding: "0.5rem" }}>Payment Method</th>
             <th style={{ borderBottom: "1px solid #ccc", padding: "0.5rem" }}>Notes</th>
             <th style={{ borderBottom: "1px solid #ccc", padding: "0.5rem" }}>Installment</th>
             <th style={{ borderBottom: "1px solid #ccc", padding: "0.5rem" }}>Subscription</th>
