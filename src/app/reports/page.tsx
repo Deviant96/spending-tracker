@@ -3,6 +3,7 @@
 import { Category, PaymentMethod, Transaction } from "@/types";
 import { formatToRupiah } from "@/utils/currency";
 import { useEffect, useState, useCallback, useRef } from "react";
+import { useSearchParams } from "next/navigation";
 
 interface ReportFilters {
   dateFrom: string;
@@ -21,6 +22,10 @@ type SortField = "period" | "count" | "total";
 type SortDirection = "asc" | "desc";
 
 export default function ReportsPage() {
+  const searchParams = useSearchParams();
+  // Default to cashflow (payment) to match installment_schedule-based totals.
+  const mode = searchParams.get("mode") === "purchase" ? "purchase" : "payment";
+
   const [groupBy, setGroupBy] = useState<"month" | "year">("month");
   const [data, setData] = useState<ReportRow[]>([]);
 
@@ -55,29 +60,11 @@ export default function ReportsPage() {
 
   console.log(filters);
 
-  // Apply filters to data
-  const filteredData = spendingData.filter((item: Transaction) => {
-    const itemDate = new Date(item.date);
-    const fromDate = new Date(filters.dateFrom);
-    const toDate = new Date(filters.dateTo);
-    const categoryMatch =
-      filters.category === "all" || item.category === filters.category;
-    const paymentMethodMatch =
-      filters.paymentMethod === "all" || item.method === filters.paymentMethod;
-
-    return (
-      itemDate >= fromDate &&
-      itemDate <= toDate &&
-      categoryMatch &&
-      paymentMethodMatch
-    );
-  });
-
-  // Calculate totals for summary
-  const totalSpending = filteredData.reduce(
-    (sum, item) => sum + item.amount,
-    0
-  );
+  // Server provides already-filtered ledger rows for the chosen mode.
+  const filteredData = spendingData;
+  const totalSpending = useCallback(() => {
+    return filteredData.reduce((sum, item) => sum + item.amount, 0);
+  }, [filteredData]);
 
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -128,7 +115,8 @@ export default function ReportsPage() {
 
       const [categoriesRes, paymentMethodsRes] = await Promise.all([
         fetch("/api/categories", { signal: controller.signal }),
-        fetch("/api/payment_methods", { signal: controller.signal }),
+        // Fix: route is `/api/payment-methods` (dash), not `/api/payment_methods`.
+        fetch("/api/payment-methods", { signal: controller.signal }),
       ]);
 
       if (!categoriesRes.ok) {
@@ -165,27 +153,41 @@ export default function ReportsPage() {
       setLoadingGroupedSpending(true);
       setError(null);
 
-      const [res, resTransactions] = await Promise.all([
-        fetch(`/api/reports/grouped?groupBy=${groupBy}`, {
-          signal: controller.signal,
-        }),
-        fetch(`/api/transactions`, {
-          signal: controller.signal,
-        }),
+      const queryCategory = filters.category;
+      const queryMethod = filters.paymentMethod;
+
+      const groupedUrl =
+        `/api/reports/grouped?groupBy=${groupBy}` +
+        `&mode=${mode}` +
+        `&startDate=${encodeURIComponent(filters.dateFrom)}` +
+        `&endDate=${encodeURIComponent(filters.dateTo)}` +
+        `&category=${encodeURIComponent(queryCategory)}` +
+        `&method=${encodeURIComponent(queryMethod)}`;
+
+      const ledgerUrl =
+        `/api/ledger?mode=${mode}` +
+        `&startDate=${encodeURIComponent(filters.dateFrom)}` +
+        `&endDate=${encodeURIComponent(filters.dateTo)}` +
+        `&category=${encodeURIComponent(queryCategory)}` +
+        `&method=${encodeURIComponent(queryMethod)}`;
+
+      const [res, resLedger] = await Promise.all([
+        fetch(groupedUrl, { signal: controller.signal }),
+        fetch(ledgerUrl, { signal: controller.signal }),
       ]);
 
       if (!res.ok) {
         throw new Error(`Failed to fetch report: ${res.status}`);
       }
-      if (!resTransactions.ok) {
-        throw new Error(`Failed to fetch transactions: ${resTransactions.status}`);
+      if (!resLedger.ok) {
+        throw new Error(`Failed to fetch ledger: ${resLedger.status}`);
       }
 
       const data = await res.json();
       setData(sortData(data));
 
-      const spendingData = await resTransactions.json();
-      setSpendingData(spendingData);
+      const ledgerPayload = await resLedger.json();
+      setSpendingData(Array.isArray(ledgerPayload?.data) ? ledgerPayload.data : []);
 
     } catch (err: unknown) {
       if (err instanceof Error && err.name !== "AbortError") {
@@ -194,7 +196,7 @@ export default function ReportsPage() {
     } finally {
       setLoadingGroupedSpending(false);
     }
-  }, [groupBy, sortData]);
+  }, [groupBy, sortData, filters, mode]);
 
   // Fetch static data once on mount
   useEffect(() => {
@@ -384,7 +386,7 @@ export default function ReportsPage() {
                 }}
               >
                 <p>
-                  Total Spending: <strong>{formatToRupiah(totalSpending)}</strong>
+                  Total Spending: <strong>{formatToRupiah(totalSpending())}</strong>
                 </p>
                 <p>
                   Number of Transactions: <strong>{filteredData.length}</strong>

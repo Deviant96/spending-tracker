@@ -1,6 +1,7 @@
 "use client";
 
-import { useTransactions } from "@/hooks/useTransactions";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   ResponsiveContainer,
   BarChart,
@@ -16,36 +17,87 @@ import {
 
 const COLORS = ["#8884d8", "#82ca9d", "#ffc658", "#ff7f50", "#a4de6c"];
 
+type GroupedRow = {
+  period: string;
+  total: number;
+  count: number;
+};
+
+function toMonthLabel(periodYYYYMM: string) {
+  // period is `YYYY-MM`
+  const d = new Date(`${periodYYYYMM}-01T00:00:00`);
+  if (Number.isNaN(d.getTime())) return periodYYYYMM;
+  return d.toLocaleString(undefined, { month: "short", year: "2-digit" });
+}
+
 export default function AnalyticsCharts() {
-  const { transactions } = useTransactions();
+  const searchParams = useSearchParams();
+  // Default to cashflow (payment) because it avoids installment double counting.
+  const mode = searchParams.get("mode") === "purchase" ? "purchase" : "payment";
 
-  // --- Monthly Spending (group by month) ---
-  const monthlyData = transactions.reduce<Record<string, number>>((acc, t) => {
-    const month = new Date(t.date).toLocaleString("default", { month: "short" });
-    acc[month] = (acc[month] || 0) + t.amount;
-    return acc;
-  }, {});
+  const [monthlyRows, setMonthlyRows] = useState<GroupedRow[]>([]);
+  const [categoryRows, setCategoryRows] = useState<GroupedRow[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const monthlyChartData = Object.entries(monthlyData).map(([month, spending]) => ({
-    month,
-    spending,
-  }));
+  useEffect(() => {
+    let cancelled = false;
 
-  // --- Category Breakdown (group by category) ---
-  const categoryData = transactions.reduce<Record<string, number>>((acc, t) => {
-    acc[t.category] = (acc[t.category] || 0) + t.amount;
-    return acc;
-  }, {});
+    async function load() {
+      try {
+        setLoading(true);
 
-  const categoryChartData = Object.entries(categoryData).map(([name, value]) => ({
-    name,
-    value,
-  }));
+        const [monthRes, categoryRes] = await Promise.all([
+          fetch(`/api/reports/grouped?groupBy=month&mode=${mode}`),
+          fetch(`/api/reports/grouped?groupBy=category&mode=${mode}`),
+        ]);
+
+        const monthData = await monthRes.json();
+        const categoryData = await categoryRes.json();
+
+        if (cancelled) return;
+
+        setMonthlyRows(Array.isArray(monthData) ? monthData : []);
+        setCategoryRows(Array.isArray(categoryData) ? categoryData : []);
+      } catch (e) {
+        if (!cancelled) {
+          setMonthlyRows([]);
+          setCategoryRows([]);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [mode]);
+
+  const monthlyChartData = useMemo(
+    () =>
+      monthlyRows.map((r) => ({
+        month: toMonthLabel(r.period),
+        spending: Number(r.total) || 0,
+      })),
+    [monthlyRows]
+  );
+
+  const categoryChartData = useMemo(
+    () =>
+      categoryRows.map((r) => ({
+        name: r.period || "Unknown",
+        value: Number(r.total) || 0,
+      })),
+    [categoryRows]
+  );
 
   return (
     <section>
       <h2>Analytics</h2>
-      {transactions.length === 0 ? (
+      {loading ? (
+        <p>Loading analytics…</p>
+      ) : monthlyChartData.length === 0 && categoryChartData.length === 0 ? (
         <p>No transactions yet. Add some to see charts!</p>
       ) : (
         <div style={{ display: "flex", gap: "2rem", flexWrap: "wrap" }}>
