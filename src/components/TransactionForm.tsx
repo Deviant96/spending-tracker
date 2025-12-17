@@ -72,7 +72,7 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
       installmentMonths: initialTransaction?.planMonths ?? undefined,
       interestTotal: initialTransaction?.planInterest ?? 0,
       feesTotal: 0,
-      isSubscription: initialTransaction?.isSubscription ?? false,
+      isSubscription: Boolean(initialTransaction?.isSubscription) ?? false,
       subscriptionInterval: initialTransaction?.subscriptionInterval ?? undefined,
     },
   });
@@ -87,12 +87,17 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
       const categoryId = initialTransaction.categoryId?.toString();
       const methodId = initialTransaction.methodId?.toString();
       
+      // IMPORTANT: Set the correct transaction ID
+      if (initialTransaction.id) setValue("id", initialTransaction.id);
       if (categoryId) setValue("categoryId", categoryId);
       if (methodId) setValue("methodId", methodId);
       if (initialTransaction.date) setValue("date", initialTransaction.date);
       if (initialTransaction.amount) setValue("amount", initialTransaction.amount);
       if (initialTransaction.notes) setValue("notes", initialTransaction.notes);
-      if (initialTransaction.isSubscription !== undefined) setValue("isSubscription", initialTransaction.isSubscription);
+      // Convert isSubscription from number (0/1) to boolean
+      if (initialTransaction.isSubscription !== undefined) {
+        setValue("isSubscription", Boolean(initialTransaction.isSubscription));
+      }
       if (initialTransaction.subscriptionInterval) setValue("subscriptionInterval", initialTransaction.subscriptionInterval);
     }
   }, [initialTransaction, setValue]);
@@ -113,7 +118,12 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
   }, [categories, paymentMethods, initialTransaction, setValue]);
 
   const onSubmitHandler = (data: TransactionFormValues) => {
+    console.log("Form submitted with data:", data);
     onSubmit({ ...data, date: data.date || "" });
+  };
+
+  const onError = (errors: any) => {
+    console.error("Form validation errors:", errors);
   };
 
   const fetchCategories = async () => {
@@ -158,9 +168,23 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
 
   return (
     <form
-      onSubmit={handleSubmit(onSubmitHandler)}
+      onSubmit={handleSubmit(onSubmitHandler, onError)}
       className="flex flex-col gap-6 max-w-md"
     >
+      {/* Debug: Show validation errors */}
+      {Object.keys(errors).length > 0 && (
+        <div className="p-4 bg-red-100 border border-red-400 text-red-700 rounded">
+          <h3 className="font-bold">Validation Errors:</h3>
+          <ul className="list-disc ml-5">
+            {Object.entries(errors).map(([field, error]: [string, any]) => (
+              <li key={field}>
+                {field}: {error?.message || "Invalid"}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* Date */}
       <div className="flex flex-col gap-2">
         <Label htmlFor="date" className="px-1">

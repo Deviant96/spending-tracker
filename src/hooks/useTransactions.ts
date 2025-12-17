@@ -49,20 +49,28 @@ export function useTransactions() {
 
   const updateTransaction = async (t: Transaction) => {
     try {
-      const res = await fetch(`/api/transactions/edit`, {
-        method: "POST",
+      const res = await fetch(`/api/transactions/${t.id}`, {
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(t),
       });
 
       const data = await res.json();
       if (res.ok && data.success) {
-        console.log("success on editing")
-        setTransactions((prev) =>
-          prev.map((transaction) =>
-            transaction.id === t.id ? { ...t } : transaction
-          )
-        );
+        console.log("success on editing");
+        
+        // Refetch the updated transaction to get the full data with category/method names
+        const getRes = await fetch(`/api/transactions/${t.id}`);
+        const getData = await getRes.json();
+        
+        if (getRes.ok && getData.data) {
+          const updatedTransaction = toCamelCase(getData.data);
+          setTransactions((prev) =>
+            prev.map((transaction) =>
+              transaction.id === t.id ? updatedTransaction : transaction
+            )
+          );
+        }
       } else {
         console.error("Failed to update transaction:", data.error);
       }

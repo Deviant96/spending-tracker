@@ -4,12 +4,14 @@ import { db } from "@/lib/db";
 export async function POST(req: NextRequest) {
     try {
         const body = await req.json();
+        console.log("Edit transaction received body:", body);
+        
         const {
             id,
             date,
             amount,
-            category,
-            method,
+            categoryId,
+            methodId,
             notes,
             installmentMonths,
             interestTotal,
@@ -17,11 +19,22 @@ export async function POST(req: NextRequest) {
             subscriptionInterval,
         } = body;
 
-        // category and method from form are the IDs (as strings)
-        const categoryId = category ? parseInt(category) : null;
-        const methodId = method || null;
+        // categoryId and methodId from form are already the IDs (as strings)
+        const categoryIdParsed = categoryId ? parseInt(categoryId) : null;
+        const methodIdParsed = methodId || null;
 
-        await db.query(
+        console.log("Update params:", {
+            id,
+            date,
+            amount,
+            categoryIdParsed,
+            methodIdParsed,
+            notes,
+            isSubscription,
+            subscriptionInterval
+        });
+
+        const result = await db.query(
             `UPDATE transactions SET
                 date = ?,
                 amount = ?,
@@ -34,8 +47,8 @@ export async function POST(req: NextRequest) {
             [
                 date,
                 amount,
-                categoryId,
-                methodId,
+                categoryIdParsed,
+                methodIdParsed,
                 notes || null,
                 isSubscription ? 1 : 0,
                 subscriptionInterval || null,
@@ -43,16 +56,11 @@ export async function POST(req: NextRequest) {
             ]
         );
 
-        // Note: Updating installment plans for existing transactions is complex.
-        // For now, we don't support changing installment details on existing transactions.
-        // If needed, we would need to:
-        // 1. Delete existing plan and schedule
-        // 2. Recreate them
-        // This is left as future work to avoid breaking existing data.
+        console.log("Update result:", result);
 
         return NextResponse.json({ success: true });
     } catch (err) {
-        console.error(err);
+        console.error("Edit transaction error:", err);
         return NextResponse.json({ error: "Failed to edit transaction" }, { status: 500 });
     }
 }

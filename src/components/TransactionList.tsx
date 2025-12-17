@@ -48,13 +48,12 @@ export default function TransactionList({ transactions, onDelete, onEdit, isLoad
 
   const handleDialogEditOpen = async (id: string) => {
     setDialogEditOpen(true);
-    // console.log(transactionToEdit);
+    console.log("Opening edit dialog for transaction ID:", id);
     const data = await getATransaction(id);
-    console.log(data.data);
+    console.log("Fetched transaction data:", data.data);
     const camelCaseData = toCamelCase(data.data);
     console.log("Converted to camelCase:", camelCaseData);
     setSingleTransaction(camelCaseData);
-    // console.log(transactionToEdit);
   }
 
   const handleDialogEditClose = () => {
