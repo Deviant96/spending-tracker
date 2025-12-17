@@ -16,8 +16,15 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       subscriptionInterval,
     } = body;
 
-    // Format date to MySQL format (YYYY-MM-DD)
-    const formattedDate = date ? new Date(date).toISOString().split('T')[0] : null;
+    // Format date to MySQL format (YYYY-MM-DD) without timezone conversion
+    let formattedDate = null;
+    if (date) {
+      const d = new Date(date);
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      formattedDate = `${year}-${month}-${day}`;
+    }
 
     const { id } = await params;
     console.log("Updating transaction with ID:", id);
