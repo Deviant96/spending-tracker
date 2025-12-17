@@ -25,12 +25,13 @@ const transactionSchema = z.object({
   id: z.string().uuid(),
   date: z.string().nullable(),
   amount: z.number().min(1, "Amount must be greater than 0"),
-  category: z.string().nonempty("Category is required"),
-  method: z.string().nonempty("Payment method is required"),
+  categoryId: z.string().nonempty("Category is required"),
+  methodId: z.string().nonempty("Payment method is required"),
   notes: z.string().optional(),
   isInstallment: z.boolean(),
-  installmentTotal: z.number().optional(),
-  installmentCurrent: z.number().optional(),
+  installmentMonths: z.number().optional(),
+  interestTotal: z.number().optional(),
+  feesTotal: z.number().optional(),
   isSubscription: z.boolean(),
   subscriptionInterval: z.enum(["weekly", "monthly", "yearly"]).optional(),
 });
@@ -38,7 +39,7 @@ const transactionSchema = z.object({
 type TransactionFormValues = z.infer<typeof transactionSchema>;
 
 type Props = {
-  onSubmit: (t: Transaction) => void;
+  onSubmit: (t: any) => void;
   initialTransaction?: Transaction | null;
 };
 
@@ -64,14 +65,13 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
       id: initialTransaction?.id ?? crypto.randomUUID(),
       date: initialTransaction?.date ?? null,
       amount: initialTransaction?.amount ?? 0,
-      category: initialTransaction?.category ?? undefined,
-      method: initialTransaction?.method ?? undefined,
+      categoryId: initialTransaction?.categoryId?.toString() ?? undefined,
+      methodId: initialTransaction?.methodId?.toString() ?? undefined,
       notes: initialTransaction?.notes ?? undefined,
-      isInstallment:
-        !!initialTransaction?.installmentTotal ||
-        !!initialTransaction?.installmentCurrent,
-      installmentTotal: initialTransaction?.installmentTotal ?? undefined,
-      installmentCurrent: initialTransaction?.installmentCurrent ?? undefined,
+      isInstallment: !!initialTransaction?.planMonths,
+      installmentMonths: initialTransaction?.planMonths ?? undefined,
+      interestTotal: initialTransaction?.planInterest ?? 0,
+      feesTotal: 0,
       isSubscription: initialTransaction?.isSubscription ?? false,
       subscriptionInterval: initialTransaction?.subscriptionInterval ?? undefined,
     },
@@ -79,11 +79,20 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
 
   const isInstallment = watch("isInstallment");
   const isSubscription = watch("isSubscription");
+  
   useEffect(() => {
     if (initialTransaction) {
-      Object.entries(initialTransaction).forEach(([key, value]) => {
-        setValue(key as keyof TransactionFormValues, value);
-      });
+      // Map the API response to form fields
+      const categoryId = initialTransaction.categoryId?.toString();
+      const methodId = initialTransaction.methodId?.toString();
+      
+      if (categoryId) setValue("categoryId", categoryId);
+      if (methodId) setValue("methodId", methodId);
+      if (initialTransaction.date) setValue("date", initialTransaction.date);
+      if (initialTransaction.amount) setValue("amount", initialTransaction.amount);
+      if (initialTransaction.notes) setValue("notes", initialTransaction.notes);
+      if (initialTransaction.isSubscription !== undefined) setValue("isSubscription", initialTransaction.isSubscription);
+      if (initialTransaction.subscriptionInterval) setValue("subscriptionInterval", initialTransaction.subscriptionInterval);
     }
   }, [initialTransaction, setValue]);
 
@@ -181,9 +190,9 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
 
       {/* Category */}
       <div className="flex flex-col gap-2">
-        <Label htmlFor="category">Category</Label>
+        <Label htmlFor="categoryId">Category</Label>
         <Controller
-          name="category"
+          name="categoryId"
           control={control}
           render={({ field }) => (
             <Select 
@@ -209,14 +218,14 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
             </Select>
           )}
         />
-        {errors.category && <span>{errors.category.message}</span>}
+        {errors.categoryId && <span>{errors.categoryId.message}</span>}
       </div>
 
       {/* Payment Method */}
       <div className="flex flex-col gap-2">
-        <Label htmlFor="method">Payment Method</Label>
+        <Label htmlFor="methodId">Payment Method</Label>
         <Controller
-          name="method"
+          name="methodId"
           control={control}
           render={({ field }) => (
             <Select onValueChange={field.onChange} defaultValue={(field.value ?? "").toString()}>
@@ -233,7 +242,7 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
             </Select>
           )}
         />
-        {errors.method && <span>{errors.method.message}</span>}
+        {errors.methodId && <span>{errors.methodId.message}</span>}
       </div>
 
       {/* Notes */}
@@ -260,17 +269,44 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
           )}
         />
         {isInstallment && (
-          <div className="mt-2 flex flex-col gap-2">
-            <Input
-              type="number"
-              placeholder="Installment Current"
-              {...register("installmentCurrent", { valueAsNumber: true })}
-            />
-            <Input
-              type="number"
-              placeholder="Installment Total"
-              {...register("installmentTotal", { valueAsNumber: true })}
-            />
+          <div className="mt-2 grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="installmentMonths">Total Months</Label>
+              <Input
+                id="installmentMonths"
+                type="number"
+                placeholder="e.g. 12"
+                {...register("installmentMonths", { valueAsNumber: true })}
+              />
+              {errors.installmentMonths && (
+                <p className="text-sm text-red-500">
+                  {errors.installmentMonths.message}
+                </p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="interestTotal">Total Interest</Label>
+              <Input
+                id="interestTotal"
+                type="number"
+                placeholder="e.g. 500000"
+                {...register("interestTotal", { valueAsNumber: true })}
+              />
+              {errors.interestTotal && (
+                <p className="text-sm text-red-500">
+                  {errors.interestTotal.message}
+                </p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="feesTotal">Total Fees (Optional)</Label>
+              <Input
+                id="feesTotal"
+                type="number"
+                placeholder="e.g. 100000"
+                {...register("feesTotal", { valueAsNumber: true })}
+              />
+            </div>
           </div>
         )}
       </div>

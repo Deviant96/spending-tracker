@@ -59,7 +59,8 @@ export default function InsightsBox() {
 
   // --- Example Insight 2: Biggest category ---
   const categoryTotals = transactions.reduce<Record<string, number>>((acc, t) => {
-    acc[t.category] = (acc[t.category] || 0) + t.amount;
+    const category = t.category || 'Unknown';
+    acc[category] = (acc[category] || 0) + t.amount;
     return acc;
   }, {});
   const biggestCategory = Object.entries(categoryTotals).sort(

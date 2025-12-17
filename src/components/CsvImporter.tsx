@@ -75,8 +75,8 @@ export default function CsvImporter() {
                   <td>{tx.method}</td>
                   <td>{tx.notes}</td>
                   <td>
-                    {tx.installmentCurrent
-                      ? `${tx.installmentCurrent} of ${tx.installmentTotal}`
+                    {tx.planMonths
+                      ? `${tx.planMonths} months`
                       : "-"}
                   </td>
                   <td>{tx.isSubscription ? "Yes" : "No"}</td>

@@ -8,10 +8,14 @@ export async function POST(req: NextRequest) {
 
   try {
     for (const r of transactions) {
+      // Determine financing status
+      const isSubscription = r.isSubscription === true;
+      const financingStatus = isSubscription ? 'subscription' : 'one_time';
+      
       await db.query(
         `INSERT INTO transactions 
-        (id, date, amount, category_id, method_id, notes, installment_total, installment_current, is_subscription, subscription_interval) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (id, date, amount, category_id, method_id, notes, is_subscription, subscription_interval, financing_status) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           randomUUID(),
           r.date,
@@ -19,10 +23,9 @@ export async function POST(req: NextRequest) {
           r.categoryId,
           r.methodId,
           r.notes || null,
-          r.installmentTotal ? Number(r.installmentTotal) : null,
-          r.installmentCurrent ? Number(r.installmentCurrent) : null,
-          r.isSubscription === true ? 1 : 0,
+          isSubscription ? 1 : 0,
           r.subscriptionInterval || null,
+          financingStatus,
         ]
       );
     }

@@ -129,10 +129,13 @@ export default function TransactionList({ transactions, onDelete, onEdit, isLoad
               <td style={{ borderBottom: "1px solid #eee", padding: "0.5rem" }}>{t.method}</td>
               <td style={{ borderBottom: "1px solid #eee", padding: "0.5rem" }}>{t.notes}</td>
               <td style={{ borderBottom: "1px solid #eee", padding: "0.5rem" }}>
-                {t.installmentTotal && t.installmentCurrent && (
+                {t.planMonths && (
                   <div>
-                    {t.installmentCurrent} of {t.installmentTotal}
+                    {t.planMonths} months plan
                   </div>
+                )}
+                {t.financingStatus === 'converted' && !t.planMonths && (
+                  <div>Converted</div>
                 )}
               </td>
               <td style={{ borderBottom: "1px solid #eee", padding: "0.5rem" }}>
