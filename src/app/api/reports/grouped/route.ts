@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
             c.name as category_name,
             (s.amount_principal + s.amount_interest + IFNULL(s.amount_fee, 0)) as amount
           FROM installment_schedule s
-          JOIN installment_plans p ON s.plan_id = p.plan_id
+          JOIN installment_plans p ON s.plan_id = p.id
           JOIN transactions t ON p.transaction_id = t.id
           JOIN categories c ON t.category_id = c.id
           WHERE s.status IN ('pending', 'paid')
@@ -107,7 +107,7 @@ export async function GET(req: NextRequest) {
             m.name as method_name,
             (s.amount_principal + s.amount_interest + IFNULL(s.amount_fee, 0)) as amount
           FROM installment_schedule s
-          JOIN installment_plans p ON s.plan_id = p.plan_id
+          JOIN installment_plans p ON s.plan_id = p.id
           JOIN transactions t ON p.transaction_id = t.id
           JOIN payment_methods m ON t.method_id = m.id
           WHERE s.status IN ('pending', 'paid')

@@ -5,6 +5,7 @@ import { useState } from "react";
 import TransactionForm from "./TransactionForm";
 import { useTransactions } from "@/hooks/useTransactions";
 import { formatToRupiah } from "@/utils/currency";
+import { toCamelCase } from "@/utils/toCamelCase";
 
 type Props = {
   transactions: Transaction[];
@@ -50,7 +51,9 @@ export default function TransactionList({ transactions, onDelete, onEdit, isLoad
     // console.log(transactionToEdit);
     const data = await getATransaction(id);
     console.log(data.data);
-    setSingleTransaction(data.data);
+    const camelCaseData = toCamelCase(data.data);
+    console.log("Converted to camelCase:", camelCaseData);
+    setSingleTransaction(camelCaseData);
     // console.log(transactionToEdit);
   }
 

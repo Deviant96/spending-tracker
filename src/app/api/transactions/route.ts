@@ -12,7 +12,7 @@ export async function GET() {
         t.created_at, t.updated_at,
         c.name AS category,
         m.name AS method,
-        p.plan_id,
+        p.id as plan_id,
         p.months as plan_months,
         p.interest_total as plan_interest,
         p.principal as plan_principal,

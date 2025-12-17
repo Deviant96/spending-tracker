@@ -80,6 +80,7 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
   const isInstallment = watch("isInstallment");
   const isSubscription = watch("isSubscription");
   
+  // Set form values when initialTransaction is available
   useEffect(() => {
     if (initialTransaction) {
       // Map the API response to form fields
@@ -95,6 +96,21 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
       if (initialTransaction.subscriptionInterval) setValue("subscriptionInterval", initialTransaction.subscriptionInterval);
     }
   }, [initialTransaction, setValue]);
+
+  // Re-apply category and method values after they are loaded
+  useEffect(() => {
+    if (initialTransaction && (categories.length > 0 || paymentMethods.length > 0)) {
+      const categoryId = initialTransaction.categoryId?.toString();
+      const methodId = initialTransaction.methodId?.toString();
+      
+      if (categoryId && categories.length > 0) {
+        setValue("categoryId", categoryId);
+      }
+      if (methodId && paymentMethods.length > 0) {
+        setValue("methodId", methodId);
+      }
+    }
+  }, [categories, paymentMethods, initialTransaction, setValue]);
 
   const onSubmitHandler = (data: TransactionFormValues) => {
     onSubmit({ ...data, date: data.date || "" });
@@ -158,6 +174,7 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
               id="date"
               placeholder="Select a date"
               helperText="MM/DD/YYYY"
+              value={field.value ? new Date(field.value) : undefined}
               onDateChange={(date) => field.onChange(date?.toISOString())}
               autoFocus
             />
@@ -197,7 +214,7 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
           render={({ field }) => (
             <Select 
               onValueChange={field.onChange} 
-              defaultValue={field.value?.toString()}
+              value={field.value?.toString()}
             >
               {isLoadingCategories ? (
                 <Skeleton className="h-[36px] w-full rounded-full" />
@@ -228,13 +245,13 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
           name="methodId"
           control={control}
           render={({ field }) => (
-            <Select onValueChange={field.onChange} defaultValue={(field.value ?? "").toString()}>
+            <Select onValueChange={field.onChange} value={field.value?.toString()}>
               <SelectTrigger>
                 <SelectValue placeholder="Select a payment method" />
               </SelectTrigger>
               <SelectContent>
                 {paymentMethods.map((method) => (
-                  <SelectItem key={method.id} value={method.id}>
+                  <SelectItem key={method.id} value={method.id.toString()}>
                     {method.name}
                   </SelectItem>
                 ))}

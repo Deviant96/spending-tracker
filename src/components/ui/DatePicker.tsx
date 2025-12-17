@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
@@ -18,15 +18,25 @@ type DatePickerProps = {
     id?: string;
     placeholder?: string;
     helperText?: string;
+    value?: Date;
     onDateChange?: (date: Date | undefined) => void;
     autoFocus: boolean;
 };
 
-const DatePicker: React.FC<DatePickerProps> = ({ id = "date", placeholder = "Select a date", helperText, onDateChange, autoFocus }) => {
-    const [value, setValue] = useState<string>("");
-    const [date, setDate] = useState<Date | undefined>(undefined);
-    const [month, setMonth] = useState<Date | undefined>(undefined);
+const DatePicker: React.FC<DatePickerProps> = ({ id = "date", placeholder = "Select a date", helperText, value: initialValue, onDateChange, autoFocus }) => {
+    const [value, setValue] = useState<string>(initialValue ? formatDate(initialValue) : "");
+    const [date, setDate] = useState<Date | undefined>(initialValue);
+    const [month, setMonth] = useState<Date | undefined>(initialValue);
     const [open, setOpen] = useState<boolean>(false);
+
+    // Update internal state when initialValue changes
+    useEffect(() => {
+        if (initialValue) {
+            setValue(formatDate(initialValue));
+            setDate(initialValue);
+            setMonth(initialValue);
+        }
+    }, [initialValue]);
 
     return (
         <div className="relative flex flex-col gap-2">

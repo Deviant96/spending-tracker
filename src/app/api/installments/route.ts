@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
 
     let query = `
       SELECT 
-        p.plan_id,
+        p.id as plan_id,
         p.transaction_id,
         p.principal,
         p.months,
@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
       INNER JOIN transactions t ON p.transaction_id = t.id
       LEFT JOIN categories c ON t.category_id = c.id
       LEFT JOIN payment_methods m ON t.method_id = m.id
-      LEFT JOIN installment_schedule s ON p.plan_id = s.plan_id
+      LEFT JOIN installment_schedule s ON p.id = s.plan_id
       WHERE 1=1
     `;
     const params: any[] = [];
@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
       params.push(status);
     }
 
-    query += " GROUP BY p.plan_id ORDER BY p.created_at DESC";
+    query += " GROUP BY p.id ORDER BY p.created_at DESC";
 
     const [rows] = await db.query(query, params);
     return NextResponse.json({ success: true, data: rows });

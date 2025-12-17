@@ -66,7 +66,7 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
         t.financing_status,
         c.name AS category,
         m.name AS method,
-        p.plan_id,
+        p.id as plan_id,
         p.months as plan_months,
         p.interest_total as plan_interest,
         p.principal as plan_principal,
