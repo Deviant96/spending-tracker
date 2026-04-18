@@ -82,7 +82,7 @@ export async function GET(req: NextRequest) {
             SUM(s.amount_principal + s.amount_interest + IFNULL(s.amount_fee, 0)) as total_expense,
             COUNT(*) as transaction_count
           FROM installment_schedule s
-          INNER JOIN installment_plans p ON s.plan_id = p.plan_id
+          INNER JOIN installment_plans p ON s.plan_id = p.id
           INNER JOIN transactions t ON p.transaction_id = t.id
           WHERE ${schWhere.join(" AND ")}
           GROUP BY period

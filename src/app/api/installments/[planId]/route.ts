@@ -13,7 +13,7 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ planId
     // Get plan details
     const [planRows] = await db.query(
       `SELECT 
-        p.plan_id,
+        p.id as plan_id,
         p.transaction_id,
         p.principal,
         p.months,
@@ -31,7 +31,7 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ planId
       INNER JOIN transactions t ON p.transaction_id = t.id
       LEFT JOIN categories c ON t.category_id = c.id
       LEFT JOIN payment_methods m ON t.method_id = m.id
-      WHERE p.plan_id = ?`,
+      WHERE p.id = ?`,
       [planId]
     );
 

@@ -5,7 +5,6 @@ import { useState } from "react";
 import TransactionForm from "./TransactionForm";
 import { useTransactions } from "@/hooks/useTransactions";
 import { formatToRupiah } from "@/utils/currency";
-import { toCamelCase } from "@/utils/toCamelCase";
 
 type Props = {
   transactions: Transaction[];
@@ -20,6 +19,7 @@ export default function TransactionList({ transactions, onDelete, onEdit, isLoad
   const [dialogEditOpen, setDialogEditOpen] = useState<boolean>(false);
   const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
   const [transactionToEdit, setTransactionToEdit] = useState<string | null>(null);
+  const [isLoadingTransaction, setIsLoadingTransaction] = useState<boolean>(false);
   const { getTransaction } = useTransactions();
   const [ singleTransaction, setSingleTransaction ] = useState<Transaction | undefined>(undefined);
 
@@ -58,10 +58,17 @@ export default function TransactionList({ transactions, onDelete, onEdit, isLoad
   }
 
   const handleDialogEditOpen = async (id: string) => {
-    const data = await getATransaction(id);
-    if (data?.data) {
-      setSingleTransaction(data.data);
-      setDialogEditOpen(true);
+    setDialogEditOpen(true);
+    setIsLoadingTransaction(true);
+    console.log("Opening edit dialog for transaction ID:", id);
+    try {
+      const data = await getATransaction(id);
+      console.log("Fetched transaction data:", data?.data);
+      if (data?.data) {
+        setSingleTransaction(data.data);
+      }
+    } finally {
+      setIsLoadingTransaction(false);
     }
   }
 
@@ -69,6 +76,7 @@ export default function TransactionList({ transactions, onDelete, onEdit, isLoad
     setDialogEditOpen(false);
     setSingleTransaction(undefined);
     setTransactionToEdit(null);
+    setIsLoadingTransaction(false);
   }
 
   const handleDelete = async () => {
@@ -203,10 +211,21 @@ export default function TransactionList({ transactions, onDelete, onEdit, isLoad
       {dialogEditOpen && (
         <div className="fixed inset-0 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-lg p-6 max-w-sm w-full">
-            <TransactionForm
-              onSubmit={handleEdit}
-              initialTransaction={singleTransaction}
-            />
+            {isLoadingTransaction ? (
+              <div className="flex flex-col gap-4">
+                <div className="h-6 bg-gray-200 rounded animate-pulse"></div>
+                <div className="h-10 bg-gray-200 rounded animate-pulse"></div>
+                <div className="h-10 bg-gray-200 rounded animate-pulse"></div>
+                <div className="h-10 bg-gray-200 rounded animate-pulse"></div>
+                <div className="h-10 bg-gray-200 rounded animate-pulse"></div>
+                <div className="h-10 bg-gray-200 rounded animate-pulse"></div>
+              </div>
+            ) : (
+              <TransactionForm
+                onSubmit={handleEdit}
+                initialTransaction={singleTransaction}
+              />
+            )}
             <div className="flex justify-end gap-2 mt-4">
               <button onClick={handleDialogEditClose} className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300">
                 Cancel

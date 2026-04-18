@@ -74,7 +74,7 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
       installmentMonths: initialTransaction?.planMonths ?? undefined,
       interestTotal: initialTransaction?.planInterest ?? 0,
       feesTotal: 0,
-      isSubscription: initialTransaction?.isSubscription ?? false,
+      isSubscription: Boolean(initialTransaction?.isSubscription) ?? false,
       subscriptionInterval: initialTransaction?.subscriptionInterval ?? undefined,
     },
   });
@@ -95,6 +95,7 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
     return normalized.length > 0 ? normalized : undefined;
   };
   
+  // Set form values when initialTransaction is available
   useEffect(() => {
     if (initialTransaction) {
       const categoryId = normalizeId(initialTransaction.categoryId);
@@ -147,8 +148,28 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
     }
   }, [paymentMethods, initialTransaction, getValues, setValue]);
 
+  // Re-apply category and method values after they are loaded
+  useEffect(() => {
+    if (initialTransaction && (categories.length > 0 || paymentMethods.length > 0)) {
+      const categoryId = initialTransaction.categoryId?.toString();
+      const methodId = initialTransaction.methodId?.toString();
+      
+      if (categoryId && categories.length > 0) {
+        setValue("categoryId", categoryId);
+      }
+      if (methodId && paymentMethods.length > 0) {
+        setValue("methodId", methodId);
+      }
+    }
+  }, [categories, paymentMethods, initialTransaction, setValue]);
+
   const onSubmitHandler = (data: TransactionFormValues) => {
+    console.log("Form submitted with data:", data);
     onSubmit({ ...data, date: data.date || "" });
+  };
+
+  const onError = (errors: any) => {
+    console.error("Form validation errors:", errors);
   };
 
   const fetchCategories = async () => {
@@ -198,9 +219,23 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
 
   return (
     <form
-      onSubmit={handleSubmit(onSubmitHandler)}
+      onSubmit={handleSubmit(onSubmitHandler, onError)}
       className="flex flex-col gap-6 max-w-md"
     >
+      {/* Debug: Show validation errors */}
+      {Object.keys(errors).length > 0 && (
+        <div className="p-4 bg-red-100 border border-red-400 text-red-700 rounded">
+          <h3 className="font-bold">Validation Errors:</h3>
+          <ul className="list-disc ml-5">
+            {Object.entries(errors).map(([field, error]: [string, any]) => (
+              <li key={field}>
+                {field}: {error?.message || "Invalid"}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* Date */}
       <div className="flex flex-col gap-2">
         <Label htmlFor="date" className="px-1">
@@ -215,6 +250,7 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
               value={field.value}
               placeholder="Select a date"
               helperText="MM/DD/YYYY"
+              onDateChange={(date) => field.onChange(date ? toLocalDateString(date) : null)}
               onDateChange={(date) => field.onChange(date ? toLocalDateString(date) : null)}
               autoFocus
             />
@@ -255,6 +291,7 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
             <Select 
               onValueChange={field.onChange} 
               value={field.value ? String(field.value) : undefined}
+              value={field.value ? String(field.value) : undefined}
             >
               {isLoadingCategories ? (
                 <Skeleton className="h-[36px] w-full rounded-full" />
@@ -286,11 +323,13 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
           control={control}
           render={({ field }) => (
             <Select onValueChange={field.onChange} value={field.value ? String(field.value) : undefined}>
+            <Select onValueChange={field.onChange} value={field.value ? String(field.value) : undefined}>
               <SelectTrigger>
                 <SelectValue placeholder="Select a payment method" />
               </SelectTrigger>
               <SelectContent>
                 {paymentMethods.map((method) => (
+                  <SelectItem key={method.id} value={String(method.id)}>
                   <SelectItem key={method.id} value={String(method.id)}>
                     {method.name}
                   </SelectItem>

@@ -75,8 +75,8 @@ export function useTransactions() {
 
   const updateTransaction = async (t: Transaction) => {
     try {
-      const res = await fetch(`/api/transactions/edit`, {
-        method: "POST",
+      const res = await fetch(`/api/transactions/${t.id}`, {
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(t),
       });

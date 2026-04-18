@@ -18,6 +18,8 @@ async function getInstallmentPlanIdColumn(): Promise<"plan_id" | "id"> {
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const body = await req.json();
+    console.log("PUT transaction received body:", body);
+    
     const {
       date,
       amount,
@@ -28,31 +30,42 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       subscriptionInterval,
     } = body;
 
-    // Calculate financing_status based on subscription
-    const financingStatus = isSubscription ? 'subscription' : 'one_time';
+    // Format date to MySQL format (YYYY-MM-DD) without timezone conversion
+    let formattedDate = null;
+    if (date) {
+      const d = new Date(date);
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      formattedDate = `${year}-${month}-${day}`;
+    }
 
     const { id } = await params;
+    console.log("Updating transaction with ID:", id);
 
-    await db.query(
+    // Update transaction without modifying financing_status
+    // financing_status is managed separately when creating/converting to installments
+    const result = await db.query(
       `UPDATE transactions 
-       SET date=?, amount=?, category_id=?, method_id=?, notes=?, is_subscription=?, subscription_interval=?, financing_status=?
+       SET date=?, amount=?, category_id=?, method_id=?, notes=?, is_subscription=?, subscription_interval=?
        WHERE id=?`,
       [
-        date,
+        formattedDate,
         amount,
         categoryId,
         methodId,
         notes || null,
         isSubscription ? 1 : 0,
         subscriptionInterval || null,
-        financingStatus,
         id,
       ]
     );
 
+    console.log("PUT update result:", result);
+
     return NextResponse.json({ success: true });
   } catch (err) {
-    console.error(err);
+    console.error("PUT transaction error:", err);
     return NextResponse.json({ error: "Failed to update transaction" }, { status: 500 });
   }
 }
@@ -73,6 +86,7 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
   try {
     const { id } = await params;
     const planIdColumn = await getInstallmentPlanIdColumn();
+    console.log("GET transaction with ID:", id);
     const [rows] = await db.query(
       `SELECT 
         t.id, t.date, t.amount, t.notes,
@@ -95,6 +109,8 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
       [id]
     );
     const record = Array.isArray(rows) ? rows[0] : null;
+
+    console.log("GET transaction found:", record);
 
     if (!record) {
       return NextResponse.json({ error: "Transaction not found" }, { status: 404 });

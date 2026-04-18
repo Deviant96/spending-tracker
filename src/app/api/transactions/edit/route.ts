@@ -72,6 +72,8 @@ async function resolveFinancingStatusForDb(desiredStatus: CanonicalFinancingStat
 export async function POST(req: NextRequest) {
     try {
         const body = await req.json();
+        console.log("Edit transaction received body:", body);
+        
         const {
             id,
             date,
@@ -153,18 +155,13 @@ export async function POST(req: NextRequest) {
                 id,
             ];
 
-        await db.query(updateQuery, updateParams);
+        const result = await db.query(updateQuery, updateParams);
 
-        // Note: Updating installment plans for existing transactions is complex.
-        // For now, we don't support changing installment details on existing transactions.
-        // If needed, we would need to:
-        // 1. Delete existing plan and schedule
-        // 2. Recreate them
-        // This is left as future work to avoid breaking existing data.
+        console.log("Update result:", result);
 
         return NextResponse.json({ success: true });
     } catch (err) {
-        console.error(err);
+        console.error("Edit transaction error:", err);
         return NextResponse.json({ error: "Failed to edit transaction" }, { status: 500 });
     }
 }
