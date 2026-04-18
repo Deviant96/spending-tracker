@@ -154,7 +154,7 @@ export default function TransactionList({ transactions, onDelete, onEdit, isLoad
                 )}
               </td>
               <td style={{ borderBottom: "1px solid #eee", padding: "0.5rem" }}>
-                {t.isSubscription === true && (
+                {Boolean(t.isSubscription) && (
                   <div>
                     Subscription {t.subscriptionInterval ?  ` (${t.subscriptionInterval})` : ""}
                   </div>

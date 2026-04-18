@@ -9,6 +9,14 @@ export function useTransactions() {
   const [isLoaded, setIsLoaded] = useState<boolean>(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
+  const normalizeTransaction = (raw: unknown): Transaction => {
+    const normalized = toCamelCase((raw ?? {}) as Record<string, unknown>);
+    return {
+      ...normalized,
+      isSubscription: Boolean(normalized.isSubscription),
+    } as Transaction;
+  };
+
   const getErrorMessage = (data: unknown, fallback: string) => {
     if (typeof data === "object" && data !== null && "error" in data) {
       const message = (data as { error?: unknown }).error;
@@ -28,7 +36,7 @@ export function useTransactions() {
         const data = isJsonResponse ? await res.json() : { error: await res.text() };
 
         if (res.ok) {
-          setTransactions(data.map(toCamelCase));
+          setTransactions(data.map(normalizeTransaction));
           setLoadError(null);
         } else {
           const message = getErrorMessage(data, "Unable to load transactions right now.");
@@ -152,7 +160,7 @@ export function useTransactions() {
       const data = isJsonResponse ? await res.json() : { error: await res.text() };
 
       if (res.ok) {
-        setTransactions(data.map(toCamelCase));
+        setTransactions(data.map(normalizeTransaction));
         setLoadError(null);
       } else {
         const message = getErrorMessage(data, "Unable to reload transactions right now.");
