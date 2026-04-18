@@ -1,6 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 
+async function getInstallmentPlanIdColumn(): Promise<"plan_id" | "id"> {
+  const [planIdRows] = await db.query("SHOW COLUMNS FROM installment_plans LIKE 'plan_id'");
+  if (Array.isArray(planIdRows) && planIdRows.length > 0) {
+    return "plan_id";
+  }
+
+  const [idRows] = await db.query("SHOW COLUMNS FROM installment_plans LIKE 'id'");
+  if (Array.isArray(idRows) && idRows.length > 0) {
+    return "id";
+  }
+
+  throw new Error("installment_plans has no supported id column (expected plan_id or id)");
+}
+
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const body = await req.json();
@@ -58,6 +72,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
+    const planIdColumn = await getInstallmentPlanIdColumn();
     const [rows] = await db.query(
       `SELECT 
         t.id, t.date, t.amount, t.notes,
@@ -66,7 +81,7 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
         t.financing_status,
         c.name AS category,
         m.name AS method,
-        p.plan_id,
+        p.${planIdColumn} AS plan_id,
         p.months as plan_months,
         p.interest_total as plan_interest,
         p.principal as plan_principal,
