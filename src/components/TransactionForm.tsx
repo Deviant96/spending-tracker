@@ -56,7 +56,9 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
     control,
     register,
     handleSubmit,
+    reset,
     setValue,
+    getValues,
     watch,
     formState: { errors },
   } = useForm<TransactionFormValues>({
@@ -79,22 +81,71 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
 
   const isInstallment = watch("isInstallment");
   const isSubscription = watch("isSubscription");
+
+  const toLocalDateString = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
+  const normalizeId = (value: unknown): string | undefined => {
+    if (value === null || value === undefined) return undefined;
+    const normalized = String(value).trim();
+    return normalized.length > 0 ? normalized : undefined;
+  };
   
   useEffect(() => {
     if (initialTransaction) {
-      // Map the API response to form fields
-      const categoryId = initialTransaction.categoryId?.toString();
-      const methodId = initialTransaction.methodId?.toString();
-      
-      if (categoryId) setValue("categoryId", categoryId);
-      if (methodId) setValue("methodId", methodId);
-      if (initialTransaction.date) setValue("date", initialTransaction.date);
-      if (initialTransaction.amount) setValue("amount", initialTransaction.amount);
-      if (initialTransaction.notes) setValue("notes", initialTransaction.notes);
-      if (initialTransaction.isSubscription !== undefined) setValue("isSubscription", initialTransaction.isSubscription);
-      if (initialTransaction.subscriptionInterval) setValue("subscriptionInterval", initialTransaction.subscriptionInterval);
+      const categoryId = normalizeId(initialTransaction.categoryId);
+      const methodId = normalizeId(initialTransaction.methodId);
+      const planMonths = Number(initialTransaction.planMonths ?? 0);
+      const isSubscription = Boolean(initialTransaction.isSubscription);
+
+      reset({
+        id: initialTransaction.id,
+        date: initialTransaction.date ?? null,
+        amount: Number(initialTransaction.amount ?? 0),
+        categoryId,
+        methodId,
+        notes: initialTransaction.notes ?? "",
+        isInstallment: planMonths > 0 || initialTransaction.financingStatus === "converted",
+        installmentMonths: planMonths || undefined,
+        interestTotal: Number(initialTransaction.planInterest ?? 0),
+        feesTotal: 0,
+        isSubscription,
+        subscriptionInterval: initialTransaction.subscriptionInterval ?? undefined,
+      });
     }
-  }, [initialTransaction, setValue]);
+  }, [initialTransaction, reset]);
+
+  useEffect(() => {
+    if (!initialTransaction) return;
+
+    const currentCategoryId = getValues("categoryId");
+    if (!currentCategoryId && initialTransaction.category && categories.length > 0) {
+      const match = categories.find(
+        (category) => category.name.toLowerCase() === initialTransaction.category?.toLowerCase()
+      );
+      if (match) {
+        setValue("categoryId", String(match.id));
+      }
+    }
+  }, [categories, initialTransaction, getValues, setValue]);
+
+  useEffect(() => {
+    if (!initialTransaction) return;
+
+    const currentMethodId = getValues("methodId");
+    if (!currentMethodId && initialTransaction.method && paymentMethods.length > 0) {
+      const match = paymentMethods.find(
+        (method) => method.name.toLowerCase() === initialTransaction.method?.toLowerCase()
+      );
+      if (match) {
+        setValue("methodId", String(match.id));
+      }
+    }
+  }, [paymentMethods, initialTransaction, getValues, setValue]);
 
   const onSubmitHandler = (data: TransactionFormValues) => {
     onSubmit({ ...data, date: data.date || "" });
@@ -118,7 +169,12 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
       try {
         const response = await fetch("/api/payment-methods");
       const { data } = await response.json();
-      setPaymentMethods(data);
+      setPaymentMethods(
+        data.map((method: PaymentMethod) => ({
+          ...method,
+          id: String(method.id),
+        }))
+      );
     } catch (error) {
       console.error("Error fetching payment methods:", error);
     } finally {
@@ -156,9 +212,10 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
           render={({ field }) => (
             <DatePicker
               id="date"
+              value={field.value}
               placeholder="Select a date"
               helperText="MM/DD/YYYY"
-              onDateChange={(date) => field.onChange(date?.toISOString())}
+              onDateChange={(date) => field.onChange(date ? toLocalDateString(date) : null)}
               autoFocus
             />
           )}
@@ -197,7 +254,7 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
           render={({ field }) => (
             <Select 
               onValueChange={field.onChange} 
-              defaultValue={field.value?.toString()}
+              value={field.value ? String(field.value) : undefined}
             >
               {isLoadingCategories ? (
                 <Skeleton className="h-[36px] w-full rounded-full" />
@@ -208,7 +265,7 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
                 </SelectTrigger>
                 <SelectContent>
                   {categories.map((category) => (
-                    <SelectItem key={category.id} value={category.id.toFixed()}>
+                    <SelectItem key={category.id} value={String(category.id)}>
                       {category.name}
                     </SelectItem>
                   ))}
@@ -228,13 +285,13 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
           name="methodId"
           control={control}
           render={({ field }) => (
-            <Select onValueChange={field.onChange} defaultValue={(field.value ?? "").toString()}>
+            <Select onValueChange={field.onChange} value={field.value ? String(field.value) : undefined}>
               <SelectTrigger>
                 <SelectValue placeholder="Select a payment method" />
               </SelectTrigger>
               <SelectContent>
                 {paymentMethods.map((method) => (
-                  <SelectItem key={method.id} value={method.id}>
+                  <SelectItem key={method.id} value={String(method.id)}>
                     {method.name}
                   </SelectItem>
                 ))}
@@ -333,7 +390,7 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
               name="subscriptionInterval"
               control={control}
               render={({ field }) => (
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <Select onValueChange={field.onChange} value={field.value}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select Interval" />
                   </SelectTrigger>

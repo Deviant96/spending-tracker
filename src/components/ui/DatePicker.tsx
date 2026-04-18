@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
@@ -16,17 +17,33 @@ const formatDate = (date: Date) =>
 
 type DatePickerProps = {
     id?: string;
+    value?: string | null;
     placeholder?: string;
     helperText?: string;
     onDateChange?: (date: Date | undefined) => void;
     autoFocus: boolean;
 };
 
-const DatePicker: React.FC<DatePickerProps> = ({ id = "date", placeholder = "Select a date", helperText, onDateChange, autoFocus }) => {
+const DatePicker: React.FC<DatePickerProps> = ({ id = "date", value: externalValue, placeholder = "Select a date", helperText, onDateChange, autoFocus }) => {
     const [value, setValue] = useState<string>("");
     const [date, setDate] = useState<Date | undefined>(undefined);
     const [month, setMonth] = useState<Date | undefined>(undefined);
     const [open, setOpen] = useState<boolean>(false);
+
+    useEffect(() => {
+        if (!externalValue) {
+            setValue("");
+            setDate(undefined);
+            return;
+        }
+
+        const parsedDate = new Date(externalValue);
+        if (isValidDate(parsedDate)) {
+            setDate(parsedDate);
+            setMonth(parsedDate);
+            setValue(formatDate(parsedDate));
+        }
+    }, [externalValue]);
 
     return (
         <div className="relative flex flex-col gap-2">

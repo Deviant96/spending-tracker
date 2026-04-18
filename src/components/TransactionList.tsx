@@ -5,6 +5,7 @@ import { useState } from "react";
 import TransactionForm from "./TransactionForm";
 import { useTransactions } from "@/hooks/useTransactions";
 import { formatToRupiah } from "@/utils/currency";
+import { toCamelCase } from "@/utils/toCamelCase";
 
 type Props = {
   transactions: Transaction[];
@@ -42,16 +43,25 @@ export default function TransactionList({ transactions, onDelete, onEdit, isLoad
   async function getATransaction(id: string) {
     const res = await fetch(`/api/transactions/${id}`);
     // if (!res.ok) throw new Error("Failed to fetch");
-    return res.json();
+    const data = await res.json();
+    if (!data?.data) return data;
+
+    const normalized = toCamelCase(data.data);
+    return {
+      ...data,
+      data: {
+        ...normalized,
+        isSubscription: Boolean(normalized.isSubscription),
+      },
+    };
   }
 
   const handleDialogEditOpen = async (id: string) => {
-    setDialogEditOpen(true);
-    // console.log(transactionToEdit);
     const data = await getATransaction(id);
-    console.log(data.data);
-    setSingleTransaction(data.data);
-    // console.log(transactionToEdit);
+    if (data?.data) {
+      setSingleTransaction(data.data);
+      setDialogEditOpen(true);
+    }
   }
 
   const handleDialogEditClose = () => {

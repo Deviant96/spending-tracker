@@ -57,11 +57,38 @@ export function useTransactions() {
 
       const data = await res.json();
       if (res.ok && data.success) {
-        console.log("success on editing")
+        let refreshed: Transaction | null = null;
+
+        try {
+          const detailRes = await fetch(`/api/transactions/${t.id}`);
+          const detailData = await detailRes.json();
+          if (detailRes.ok && detailData?.data) {
+            const normalized = toCamelCase(detailData.data);
+            refreshed = {
+              ...normalized,
+              isSubscription: Boolean(normalized.isSubscription),
+            };
+          }
+        } catch (detailErr) {
+          console.error("Failed to refresh updated transaction:", detailErr);
+        }
+
         setTransactions((prev) =>
-          prev.map((transaction) =>
-            transaction.id === t.id ? { ...t } : transaction
-          )
+          prev.map((transaction) => {
+            if (transaction.id !== t.id) return transaction;
+
+            const merged = {
+              ...transaction,
+              ...t,
+              ...(refreshed || {}),
+            };
+
+            return {
+              ...merged,
+              category: merged.category ?? transaction.category,
+              method: merged.method ?? transaction.method,
+            };
+          })
         );
       } else {
         console.error("Failed to update transaction:", data.error);

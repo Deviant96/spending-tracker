@@ -2,6 +2,76 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { randomUUID } from "crypto";
 
+function normalizeDateForSql(value: unknown): string | null {
+  if (!value) return null;
+
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    return raw;
+  }
+
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, "0");
+  const day = String(parsed.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+type CanonicalFinancingStatus = "one_time" | "converted" | "subscription";
+
+function parseEnumValues(columnType: string): string[] {
+  const match = columnType.match(/^enum\((.*)\)$/i);
+  if (!match) return [];
+
+  return match[1]
+    .split(",")
+    .map((raw) => raw.trim().replace(/^'/, "").replace(/'$/, ""));
+}
+
+function mapToSupportedStatus(
+  desiredStatus: CanonicalFinancingStatus,
+  supportedValues: string[]
+): string | null {
+  const byPreference: Record<CanonicalFinancingStatus, string[]> = {
+    one_time: ["one_time", "single", "normal", "cash", "one-time", "once"],
+    converted: ["converted", "installment", "installments", "financed", "cicilan"],
+    subscription: ["subscription", "recurring", "repeat", "berlangganan"],
+  };
+
+  const normalizedMap = new Map(supportedValues.map((value) => [value.toLowerCase(), value]));
+  for (const candidate of byPreference[desiredStatus]) {
+    const found = normalizedMap.get(candidate.toLowerCase());
+    if (found) return found;
+  }
+
+  return null;
+}
+
+async function resolveFinancingStatusForDb(
+  connection: Awaited<ReturnType<typeof db.getConnection>>,
+  desiredStatus: CanonicalFinancingStatus
+): Promise<string | null> {
+  const [rows] = await connection.query("SHOW COLUMNS FROM transactions LIKE 'financing_status'");
+  const column = Array.isArray(rows) && rows.length > 0 ? (rows[0] as { Type?: string }) : null;
+
+  if (!column?.Type) {
+    return null;
+  }
+
+  const supportedValues = parseEnumValues(column.Type);
+  if (supportedValues.length === 0) {
+    return null;
+  }
+
+  return mapToSupportedStatus(desiredStatus, supportedValues);
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -18,6 +88,11 @@ export async function POST(req: NextRequest) {
       subscriptionInterval,
     } = body;
 
+    const normalizedDate = normalizeDateForSql(date);
+    if (!normalizedDate) {
+      return NextResponse.json({ error: "Invalid date format" }, { status: 400 });
+    }
+
     const connection = await db.getConnection();
     await connection.beginTransaction();
 
@@ -26,26 +101,45 @@ export async function POST(req: NextRequest) {
 
       // Determine financing status
       const willCreateInstallment = isInstallment && installmentMonths > 1;
-      const financingStatus = isSubscription ? 'subscription' : 
+      const desiredStatus: CanonicalFinancingStatus = isSubscription ? 'subscription' : 
                              willCreateInstallment ? 'converted' : 'one_time';
+      const dbFinancingStatus = await resolveFinancingStatusForDb(connection, desiredStatus);
 
       // Insert Base Transaction
-      await connection.query(
-        `INSERT INTO transactions 
-        (id, date, amount, category_id, method_id, notes, is_subscription, subscription_interval, financing_status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          transactionId,
-          date,
-          amount,
-          categoryId,
-          methodId,
-          notes || null,
-          isSubscription ? 1 : 0,
-          subscriptionInterval || null,
-          financingStatus,
-        ]
-      );
+      if (dbFinancingStatus) {
+        await connection.query(
+          `INSERT INTO transactions 
+          (id, date, amount, category_id, method_id, notes, is_subscription, subscription_interval, financing_status)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            transactionId,
+            normalizedDate,
+            amount,
+            categoryId,
+            methodId,
+            notes || null,
+            isSubscription ? 1 : 0,
+            subscriptionInterval || null,
+            dbFinancingStatus,
+          ]
+        );
+      } else {
+        await connection.query(
+          `INSERT INTO transactions 
+          (id, date, amount, category_id, method_id, notes, is_subscription, subscription_interval)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            transactionId,
+            normalizedDate,
+            amount,
+            categoryId,
+            methodId,
+            notes || null,
+            isSubscription ? 1 : 0,
+            subscriptionInterval || null,
+          ]
+        );
+      }
 
       // Handle Installment Logic
       if (isInstallment && installmentMonths > 1) {
@@ -57,14 +151,14 @@ export async function POST(req: NextRequest) {
         // Create Plan
         const [planResult] = await connection.query(
           `INSERT INTO installment_plans (transaction_id, principal, months, interest_total, start_month) VALUES (?, ?, ?, ?, ?)`,
-          [transactionId, amount, months, interest, date.substring(0, 7)]
+          [transactionId, amount, months, interest, normalizedDate.substring(0, 7)]
         );
         // @ts-ignore
         const planId = planResult.insertId;
 
         // Generate Schedule
         const scheduleValues = [];
-        let currentDate = new Date(date);
+        let currentDate = new Date(`${normalizedDate}T00:00:00`);
         // Set to 1st of month to avoid edge cases like Jan 31 -> Feb 28/29
         currentDate.setDate(1);
 
