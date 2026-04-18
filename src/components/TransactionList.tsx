@@ -12,9 +12,10 @@ type Props = {
   onDelete: (id: string) => Promise<boolean | void>,
   onEdit: (t: Transaction) => Promise<boolean | void>,
   isLoaded: boolean;
+  hasLoadError?: boolean;
 };
 
-export default function TransactionList({ transactions, onDelete, onEdit, isLoaded }: Props) {
+export default function TransactionList({ transactions, onDelete, onEdit, isLoaded, hasLoadError = false }: Props) {
   const [dialogDeleteOpen, setDialogDeleteOpen] = useState<boolean>(false);
   const [dialogEditOpen, setDialogEditOpen] = useState<boolean>(false);
   const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
@@ -95,6 +96,10 @@ export default function TransactionList({ transactions, onDelete, onEdit, isLoad
 
   if (!isLoaded) {
     return <p>Loading...</p>
+  }
+
+  if (hasLoadError && transactions.length === 0) {
+    return null;
   }
   
   if (transactions.length === 0) {

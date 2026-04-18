@@ -7,18 +7,36 @@ import { toCamelCase } from "@/utils/toCamelCase";
 export function useTransactions() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoaded, setIsLoaded] = useState<boolean>(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const getErrorMessage = (data: unknown, fallback: string) => {
+    if (typeof data === "object" && data !== null && "error" in data) {
+      const message = (data as { error?: unknown }).error;
+      if (typeof message === "string" && message.trim().length > 0) {
+        return message;
+      }
+    }
+
+    return fallback;
+  };
 
   useEffect(() => {
     async function fetchTransactions() {
       try {
         const res = await fetch("/api/transactions");
-        const data = await res.json();
+        const isJsonResponse = res.headers.get("content-type")?.includes("application/json");
+        const data = isJsonResponse ? await res.json() : { error: await res.text() };
+
         if (res.ok) {
           setTransactions(data.map(toCamelCase));
+          setLoadError(null);
         } else {
-          console.error("Failed to fetch transactions:", data.error);
+          const message = getErrorMessage(data, "Unable to load transactions right now.");
+          setLoadError(message);
+          console.error("Failed to fetch transactions:", message);
         }
       } catch (err) {
+        setLoadError("Unable to connect to the server. Please try again.");
         console.error("Error loading transactions:", err);
       } finally {
         setIsLoaded(true);
@@ -127,15 +145,22 @@ export function useTransactions() {
 
   const reloadTransactions = async () => {
     setIsLoaded(false);
+    setLoadError(null);
     try {
       const res = await fetch("/api/transactions");
-      const data = await res.json();
+      const isJsonResponse = res.headers.get("content-type")?.includes("application/json");
+      const data = isJsonResponse ? await res.json() : { error: await res.text() };
+
       if (res.ok) {
-        setTransactions(data);
+        setTransactions(data.map(toCamelCase));
+        setLoadError(null);
       } else {
-        console.error("Failed to reload transactions:", data.error);
+        const message = getErrorMessage(data, "Unable to reload transactions right now.");
+        setLoadError(message);
+        console.error("Failed to reload transactions:", message);
       }
     } catch (err) {
+      setLoadError("Unable to connect to the server. Please try again.");
       console.error("Error reloading transactions:", err);
     } finally {
       setIsLoaded(true);
@@ -149,6 +174,7 @@ export function useTransactions() {
     deleteTransaction,
     getTransaction,
     reloadTransactions,
-    isLoaded 
+    isLoaded,
+    loadError,
   };
 }
