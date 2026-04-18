@@ -5,19 +5,22 @@ import { useState } from "react";
 import TransactionForm from "./TransactionForm";
 import { useTransactions } from "@/hooks/useTransactions";
 import { formatToRupiah } from "@/utils/currency";
+import { toCamelCase } from "@/utils/toCamelCase";
 
 type Props = {
   transactions: Transaction[];
   onDelete: (id: string) => Promise<boolean | void>,
   onEdit: (t: Transaction) => Promise<boolean | void>,
   isLoaded: boolean;
+  hasLoadError?: boolean;
 };
 
-export default function TransactionList({ transactions, onDelete, onEdit, isLoaded }: Props) {
+export default function TransactionList({ transactions, onDelete, onEdit, isLoaded, hasLoadError = false }: Props) {
   const [dialogDeleteOpen, setDialogDeleteOpen] = useState<boolean>(false);
   const [dialogEditOpen, setDialogEditOpen] = useState<boolean>(false);
   const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
   const [transactionToEdit, setTransactionToEdit] = useState<string | null>(null);
+  const [isLoadingTransaction, setIsLoadingTransaction] = useState<boolean>(false);
   const { getTransaction } = useTransactions();
   const [ singleTransaction, setSingleTransaction ] = useState<Transaction | undefined>(undefined);
 
@@ -42,22 +45,39 @@ export default function TransactionList({ transactions, onDelete, onEdit, isLoad
   async function getATransaction(id: string) {
     const res = await fetch(`/api/transactions/${id}`);
     // if (!res.ok) throw new Error("Failed to fetch");
-    return res.json();
+    const data = await res.json();
+    if (!data?.data) return data;
+
+    const normalized = toCamelCase(data.data);
+    return {
+      ...data,
+      data: {
+        ...normalized,
+        isSubscription: Boolean(normalized.isSubscription),
+      },
+    };
   }
 
   const handleDialogEditOpen = async (id: string) => {
     setDialogEditOpen(true);
-    // console.log(transactionToEdit);
-    const data = await getATransaction(id);
-    console.log(data.data);
-    setSingleTransaction(data.data);
-    // console.log(transactionToEdit);
+    setIsLoadingTransaction(true);
+    console.log("Opening edit dialog for transaction ID:", id);
+    try {
+      const data = await getATransaction(id);
+      console.log("Fetched transaction data:", data?.data);
+      if (data?.data) {
+        setSingleTransaction(data.data);
+      }
+    } finally {
+      setIsLoadingTransaction(false);
+    }
   }
 
   const handleDialogEditClose = () => {
     setDialogEditOpen(false);
     setSingleTransaction(undefined);
     setTransactionToEdit(null);
+    setIsLoadingTransaction(false);
   }
 
   const handleDelete = async () => {
@@ -85,6 +105,10 @@ export default function TransactionList({ transactions, onDelete, onEdit, isLoad
 
   if (!isLoaded) {
     return <p>Loading...</p>
+  }
+
+  if (hasLoadError && transactions.length === 0) {
+    return null;
   }
   
   if (transactions.length === 0) {
@@ -129,14 +153,17 @@ export default function TransactionList({ transactions, onDelete, onEdit, isLoad
               <td style={{ borderBottom: "1px solid #eee", padding: "0.5rem" }}>{t.method}</td>
               <td style={{ borderBottom: "1px solid #eee", padding: "0.5rem" }}>{t.notes}</td>
               <td style={{ borderBottom: "1px solid #eee", padding: "0.5rem" }}>
-                {t.installmentTotal && t.installmentCurrent && (
+                {t.planMonths && (
                   <div>
-                    {t.installmentCurrent} of {t.installmentTotal}
+                    {t.planMonths} months plan
                   </div>
+                )}
+                {t.financingStatus === 'converted' && !t.planMonths && (
+                  <div>Converted</div>
                 )}
               </td>
               <td style={{ borderBottom: "1px solid #eee", padding: "0.5rem" }}>
-                {t.isSubscription === true && (
+                {Boolean(t.isSubscription) && (
                   <div>
                     Subscription {t.subscriptionInterval ?  ` (${t.subscriptionInterval})` : ""}
                   </div>
@@ -185,10 +212,21 @@ export default function TransactionList({ transactions, onDelete, onEdit, isLoad
       {dialogEditOpen && (
         <div className="fixed inset-0 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-lg p-6 max-w-sm w-full">
-            <TransactionForm
-              onSubmit={handleEdit}
-              initialTransaction={singleTransaction}
-            />
+            {isLoadingTransaction ? (
+              <div className="flex flex-col gap-4">
+                <div className="h-6 bg-gray-200 rounded animate-pulse"></div>
+                <div className="h-10 bg-gray-200 rounded animate-pulse"></div>
+                <div className="h-10 bg-gray-200 rounded animate-pulse"></div>
+                <div className="h-10 bg-gray-200 rounded animate-pulse"></div>
+                <div className="h-10 bg-gray-200 rounded animate-pulse"></div>
+                <div className="h-10 bg-gray-200 rounded animate-pulse"></div>
+              </div>
+            ) : (
+              <TransactionForm
+                onSubmit={handleEdit}
+                initialTransaction={singleTransaction}
+              />
+            )}
             <div className="flex justify-end gap-2 mt-4">
               <button onClick={handleDialogEditClose} className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300">
                 Cancel

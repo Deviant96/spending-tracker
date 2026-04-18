@@ -438,8 +438,10 @@ export default function ReportsPage() {
                           {item.notes || "-"}
                         </td>
                         <td style={{ padding: "0.5rem" }}>
-                          {item.installmentCurrent && item.installmentTotal
-                            ? `${item.installmentCurrent} of ${item.installmentTotal}`
+                          {item.planMonths
+                            ? `${item.planMonths} months`
+                            : item.financingStatus === 'converted'
+                            ? "Converted"
                             : "-"}
                         </td>
                         <td style={{ padding: "0.5rem" }}>

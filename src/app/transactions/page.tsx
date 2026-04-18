@@ -9,10 +9,9 @@ import TransactionFilters from "@/components/TransactionFilters";
 import { useCategories } from "@/hooks/useCategories";
 
 export default function TransactionsPage() {
-  const { transactions, updateTransaction, deleteTransaction, isLoaded } = useTransactions();
+  const { transactions, updateTransaction, deleteTransaction, isLoaded, loadError, reloadTransactions } = useTransactions();
   const { categories } = useCategories();
 
-  console.log("Categhories", categories);
   const [filters, setFilters] = useState<Filters>({
     category: "all",
     month: "all",
@@ -47,11 +46,50 @@ export default function TransactionsPage() {
       />
 
       <Link href="/transactions/add">+ Add Transaction</Link>
+
+      {loadError && (
+        <div
+          role="alert"
+          style={{
+            marginTop: "1rem",
+            marginBottom: "1rem",
+            padding: "0.75rem 1rem",
+            border: "1px solid #f5c2c7",
+            backgroundColor: "#fff5f5",
+            color: "#842029",
+            borderRadius: "8px",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: "1rem",
+          }}
+        >
+          <span>
+            Unable to load transactions right now. Please check your connection and try again.
+          </span>
+          <button
+            onClick={reloadTransactions}
+            style={{
+              border: "1px solid #842029",
+              borderRadius: "6px",
+              padding: "0.35rem 0.7rem",
+              background: "transparent",
+              color: "#842029",
+              cursor: "pointer",
+              fontWeight: 600,
+            }}
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       <TransactionList 
         transactions={filtered} 
         onDelete={deleteTransaction}
         onEdit={updateTransaction}
-        isLoaded={isLoaded} 
+        isLoaded={isLoaded}
+        hasLoadError={Boolean(loadError)}
       />
     </main>
   );
