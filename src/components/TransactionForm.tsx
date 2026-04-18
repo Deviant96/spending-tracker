@@ -251,7 +251,6 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
               placeholder="Select a date"
               helperText="MM/DD/YYYY"
               onDateChange={(date) => field.onChange(date ? toLocalDateString(date) : null)}
-              onDateChange={(date) => field.onChange(date ? toLocalDateString(date) : null)}
               autoFocus
             />
           )}
@@ -291,7 +290,6 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
             <Select 
               onValueChange={field.onChange} 
               value={field.value ? String(field.value) : undefined}
-              value={field.value ? String(field.value) : undefined}
             >
               {isLoadingCategories ? (
                 <Skeleton className="h-[36px] w-full rounded-full" />
@@ -323,13 +321,11 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
           control={control}
           render={({ field }) => (
             <Select onValueChange={field.onChange} value={field.value ? String(field.value) : undefined}>
-            <Select onValueChange={field.onChange} value={field.value ? String(field.value) : undefined}>
               <SelectTrigger>
                 <SelectValue placeholder="Select a payment method" />
               </SelectTrigger>
               <SelectContent>
                 {paymentMethods.map((method) => (
-                  <SelectItem key={method.id} value={String(method.id)}>
                   <SelectItem key={method.id} value={String(method.id)}>
                     {method.name}
                   </SelectItem>
