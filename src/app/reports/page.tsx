@@ -128,7 +128,7 @@ export default function ReportsPage() {
 
       const [categoriesRes, paymentMethodsRes] = await Promise.all([
         fetch("/api/categories", { signal: controller.signal }),
-        fetch("/api/payment_methods", { signal: controller.signal }),
+        fetch("/api/payment-methods", { signal: controller.signal }),
       ]);
 
       if (!categoriesRes.ok) {
