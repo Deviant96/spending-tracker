@@ -84,6 +84,7 @@ export async function POST(req: NextRequest) {
       isInstallment,
       installmentMonths,
       interestTotal,
+      feesTotal,
       isSubscription,
       subscriptionInterval,
     } = body;
@@ -145,13 +146,15 @@ export async function POST(req: NextRequest) {
       if (isInstallment && installmentMonths > 1) {
         const months = Number(installmentMonths);
         const interest = Number(interestTotal) || 0;
+        const fees = Number(feesTotal) || 0;
         const monthlyPrincipal = Math.floor(amount / months);
         const monthlyInterest = Math.floor(interest / months);
+        const monthlyFee = Math.floor(fees / months);
 
         // Create Plan
         const [planResult] = await connection.query(
-          `INSERT INTO installment_plans (transaction_id, principal, months, interest_total, start_month) VALUES (?, ?, ?, ?, ?)`,
-          [transactionId, amount, months, interest, normalizedDate.substring(0, 7)]
+          `INSERT INTO installment_plans (transaction_id, principal, months, interest_total, fees_total, start_month) VALUES (?, ?, ?, ?, ?, ?)`,
+          [transactionId, amount, months, interest, fees, normalizedDate.substring(0, 7)]
         );
         // @ts-ignore
         const planId = planResult.insertId;
@@ -175,12 +178,16 @@ export async function POST(req: NextRequest) {
           const iAmount = isLast
             ? interest - monthlyInterest * (months - 1)
             : monthlyInterest;
+          const fAmount = isLast
+            ? fees - monthlyFee * (months - 1)
+            : monthlyFee;
 
           scheduleValues.push([
             planId,
             dueMonth,
             pAmount,
             iAmount,
+            fAmount,
             "pending",
           ]);
 
@@ -189,7 +196,7 @@ export async function POST(req: NextRequest) {
         }
 
         await connection.query(
-          `INSERT INTO installment_schedule (plan_id, due_month, amount_principal, amount_interest, status) VALUES ?`,
+          `INSERT INTO installment_schedule (plan_id, due_month, amount_principal, amount_interest, amount_fee, status) VALUES ?`,
           [scheduleValues]
         );
       }
