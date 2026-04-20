@@ -63,6 +63,7 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
     formState: { errors },
   } = useForm<TransactionFormValues>({
     resolver: zodResolver(transactionSchema),
+    shouldUnregister: true,
     defaultValues: {
       id: initialTransaction?.id ?? crypto.randomUUID(),
       date: initialTransaction?.date ?? null,
@@ -208,6 +209,14 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
   }, [isSubscription]); 
 
   useEffect(() => {
+    if (!isInstallment) {
+      setValue("installmentMonths", undefined);
+      setValue("interestTotal", undefined);
+      setValue("feesTotal", undefined);
+    }
+  }, [isInstallment, setValue]);
+
+  useEffect(() => {
     fetchCategories();
     fetchPaymentMethods();
 
@@ -222,6 +231,8 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
       onSubmit={handleSubmit(onSubmitHandler, onError)}
       className="flex flex-col gap-6 max-w-md"
     >
+      <Input type="hidden" {...register("id")} />
+
       {/* Debug: Show validation errors */}
       {Object.keys(errors).length > 0 && (
         <div className="p-4 bg-red-100 border border-red-400 text-red-700 rounded">
@@ -368,7 +379,13 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
                 id="installmentMonths"
                 type="number"
                 placeholder="e.g. 12"
-                {...register("installmentMonths", { valueAsNumber: true })}
+                {...register("installmentMonths", {
+                  setValueAs: (value) => {
+                    if (value === "" || value === null || value === undefined) return undefined;
+                    const parsed = Number(value);
+                    return Number.isNaN(parsed) ? undefined : parsed;
+                  },
+                })}
               />
               {errors.installmentMonths && (
                 <p className="text-sm text-red-500">
@@ -382,7 +399,13 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
                 id="interestTotal"
                 type="number"
                 placeholder="e.g. 500000"
-                {...register("interestTotal", { valueAsNumber: true })}
+                {...register("interestTotal", {
+                  setValueAs: (value) => {
+                    if (value === "" || value === null || value === undefined) return undefined;
+                    const parsed = Number(value);
+                    return Number.isNaN(parsed) ? undefined : parsed;
+                  },
+                })}
               />
               {errors.interestTotal && (
                 <p className="text-sm text-red-500">
@@ -396,7 +419,13 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
                 id="feesTotal"
                 type="number"
                 placeholder="e.g. 100000"
-                {...register("feesTotal", { valueAsNumber: true })}
+                {...register("feesTotal", {
+                  setValueAs: (value) => {
+                    if (value === "" || value === null || value === undefined) return undefined;
+                    const parsed = Number(value);
+                    return Number.isNaN(parsed) ? undefined : parsed;
+                  },
+                })}
               />
             </div>
           </div>

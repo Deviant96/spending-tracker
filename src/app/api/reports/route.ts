@@ -2,6 +2,54 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 
+type CanonicalScheduleStatus = "pending" | "paid" | "overdue";
+
+function parseEnumValues(columnType: string): string[] {
+  const match = columnType.match(/^enum\((.*)\)$/i);
+  if (!match) return [];
+
+  return match[1]
+    .split(",")
+    .map((raw) => raw.trim().replace(/^'/, "").replace(/'$/, ""));
+}
+
+function mapScheduleStatusToSupportedValue(
+  desiredStatus: CanonicalScheduleStatus,
+  supportedValues: string[]
+): string | null {
+  const byPreference: Record<CanonicalScheduleStatus, string[]> = {
+    pending: ["pending", "unpaid", "due", "open", "waiting"],
+    paid: ["paid", "settled", "done", "lunas"],
+    overdue: ["overdue", "late", "past_due"],
+  };
+
+  const normalizedMap = new Map(supportedValues.map((value) => [value.toLowerCase(), value]));
+  for (const candidate of byPreference[desiredStatus]) {
+    const found = normalizedMap.get(candidate.toLowerCase());
+    if (found) return found;
+  }
+
+  return null;
+}
+
+async function resolveInstallmentScheduleStatusForDb(
+  desiredStatus: CanonicalScheduleStatus
+): Promise<string | null> {
+  const [rows] = await db.query("SHOW COLUMNS FROM installment_schedule LIKE 'status'");
+  const column = Array.isArray(rows) && rows.length > 0 ? (rows[0] as { Type?: string }) : null;
+
+  if (!column?.Type) {
+    return null;
+  }
+
+  const supportedValues = parseEnumValues(column.Type);
+  if (supportedValues.length === 0) {
+    return null;
+  }
+
+  return mapScheduleStatusToSupportedValue(desiredStatus, supportedValues);
+}
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -32,17 +80,19 @@ export async function GET(req: NextRequest) {
     if (mode === "cashflow" && period === "monthly") {
       // CASHFLOW VIEW: Exclude converted transactions, include installment schedule payments
       // This represents actual monthly cash outflows
+      const pendingScheduleStatus = (await resolveInstallmentScheduleStatusForDb("pending")) || "pending";
+      const paidScheduleStatus = (await resolveInstallmentScheduleStatusForDb("paid")) || "paid";
       
       const txWhere = ["t.financing_status != 'converted'"]; // Exclude converted transactions
-      const schWhere = ["s.status IN ('pending', 'paid')"]; // Include pending and paid installments
+      const schWhere = ["s.status IN (?, ?)"]; // Include pending and paid installments
       const txParams: any[] = [];
-      const schParams: any[] = [];
+      const schParams: any[] = [pendingScheduleStatus, paidScheduleStatus];
 
       if (start && end) {
         txWhere.push("t.date BETWEEN ? AND ?");
         txParams.push(start, end);
         
-        schWhere.push("s.due_month BETWEEN DATE_FORMAT(?, '%Y-%m') AND DATE_FORMAT(?, '%Y-%m')");
+        schWhere.push("LEFT(CAST(s.due_month AS CHAR), 7) BETWEEN DATE_FORMAT(?, '%Y-%m') AND DATE_FORMAT(?, '%Y-%m')");
         schParams.push(start, end);
       }
 
@@ -78,7 +128,7 @@ export async function GET(req: NextRequest) {
 
           -- Part 2: Installment schedule payments (monthly obligations)
           SELECT 
-            s.due_month as period,
+            LEFT(CAST(s.due_month AS CHAR), 7) as period,
             SUM(s.amount_principal + s.amount_interest + IFNULL(s.amount_fee, 0)) as total_expense,
             COUNT(*) as transaction_count
           FROM installment_schedule s

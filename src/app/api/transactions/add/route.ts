@@ -53,6 +53,27 @@ function mapToSupportedStatus(
   return null;
 }
 
+type CanonicalScheduleStatus = "pending" | "paid" | "overdue";
+
+function mapScheduleStatusToSupportedValue(
+  desiredStatus: CanonicalScheduleStatus,
+  supportedValues: string[]
+): string | null {
+  const byPreference: Record<CanonicalScheduleStatus, string[]> = {
+    pending: ["pending", "unpaid", "due", "open", "waiting"],
+    paid: ["paid", "settled", "done", "lunas"],
+    overdue: ["overdue", "late", "past_due"],
+  };
+
+  const normalizedMap = new Map(supportedValues.map((value) => [value.toLowerCase(), value]));
+  for (const candidate of byPreference[desiredStatus]) {
+    const found = normalizedMap.get(candidate.toLowerCase());
+    if (found) return found;
+  }
+
+  return null;
+}
+
 async function resolveFinancingStatusForDb(
   connection: Awaited<ReturnType<typeof db.getConnection>>,
   desiredStatus: CanonicalFinancingStatus
@@ -70,6 +91,52 @@ async function resolveFinancingStatusForDb(
   }
 
   return mapToSupportedStatus(desiredStatus, supportedValues);
+}
+
+async function resolveInstallmentStartMonthForDb(
+  connection: Awaited<ReturnType<typeof db.getConnection>>,
+  normalizedDate: string
+): Promise<string> {
+  const [rows] = await connection.query("SHOW COLUMNS FROM installment_plans LIKE 'start_month'");
+  const column = Array.isArray(rows) && rows.length > 0 ? (rows[0] as { Type?: string }) : null;
+
+  const yearMonth = normalizedDate.substring(0, 7);
+  if (!column?.Type) {
+    return yearMonth;
+  }
+
+  if (/^(date|datetime|timestamp)/i.test(column.Type)) {
+    return `${yearMonth}-01`;
+  }
+
+  return yearMonth;
+}
+
+async function isInstallmentDueMonthDateLike(
+  connection: Awaited<ReturnType<typeof db.getConnection>>
+): Promise<boolean> {
+  const [rows] = await connection.query("SHOW COLUMNS FROM installment_schedule LIKE 'due_month'");
+  const column = Array.isArray(rows) && rows.length > 0 ? (rows[0] as { Type?: string }) : null;
+  return Boolean(column?.Type && /^(date|datetime|timestamp)/i.test(column.Type));
+}
+
+async function resolveInstallmentScheduleStatusForDb(
+  connection: Awaited<ReturnType<typeof db.getConnection>>,
+  desiredStatus: CanonicalScheduleStatus
+): Promise<string | null> {
+  const [rows] = await connection.query("SHOW COLUMNS FROM installment_schedule LIKE 'status'");
+  const column = Array.isArray(rows) && rows.length > 0 ? (rows[0] as { Type?: string }) : null;
+
+  if (!column?.Type) {
+    return null;
+  }
+
+  const supportedValues = parseEnumValues(column.Type);
+  if (supportedValues.length === 0) {
+    return null;
+  }
+
+  return mapScheduleStatusToSupportedValue(desiredStatus, supportedValues);
 }
 
 export async function POST(req: NextRequest) {
@@ -150,11 +217,14 @@ export async function POST(req: NextRequest) {
         const monthlyPrincipal = Math.floor(amount / months);
         const monthlyInterest = Math.floor(interest / months);
         const monthlyFee = Math.floor(fees / months);
+        const startMonth = await resolveInstallmentStartMonthForDb(connection, normalizedDate);
+        const dueMonthIsDateLike = await isInstallmentDueMonthDateLike(connection);
+        const pendingScheduleStatus = await resolveInstallmentScheduleStatusForDb(connection, "pending");
 
         // Create Plan
         const [planResult] = await connection.query(
           `INSERT INTO installment_plans (transaction_id, principal, months, interest_total, fees_total, start_month) VALUES (?, ?, ?, ?, ?, ?)`,
-          [transactionId, amount, months, interest, fees, normalizedDate.substring(0, 7)]
+          [transactionId, amount, months, interest, fees, startMonth]
         );
         // @ts-ignore
         const planId = planResult.insertId;
@@ -168,7 +238,7 @@ export async function POST(req: NextRequest) {
         for (let i = 0; i < months; i++) {
           const year = currentDate.getFullYear();
           const month = String(currentDate.getMonth() + 1).padStart(2, "0");
-          const dueMonth = `${year}-${month}`;
+          const dueMonth = dueMonthIsDateLike ? `${year}-${month}-01` : `${year}-${month}`;
 
           // Handle remainder logic for last month
           const isLast = i === months - 1;
@@ -182,23 +252,40 @@ export async function POST(req: NextRequest) {
             ? fees - monthlyFee * (months - 1)
             : monthlyFee;
 
-          scheduleValues.push([
-            planId,
-            dueMonth,
-            pAmount,
-            iAmount,
-            fAmount,
-            "pending",
-          ]);
+          if (pendingScheduleStatus) {
+            scheduleValues.push([
+              planId,
+              dueMonth,
+              pAmount,
+              iAmount,
+              fAmount,
+              pendingScheduleStatus,
+            ]);
+          } else {
+            scheduleValues.push([
+              planId,
+              dueMonth,
+              pAmount,
+              iAmount,
+              fAmount,
+            ]);
+          }
 
           // Increment month
           currentDate.setMonth(currentDate.getMonth() + 1);
         }
 
-        await connection.query(
-          `INSERT INTO installment_schedule (plan_id, due_month, amount_principal, amount_interest, amount_fee, status) VALUES ?`,
-          [scheduleValues]
-        );
+        if (pendingScheduleStatus) {
+          await connection.query(
+            `INSERT INTO installment_schedule (plan_id, due_month, amount_principal, amount_interest, amount_fee, status) VALUES ?`,
+            [scheduleValues]
+          );
+        } else {
+          await connection.query(
+            `INSERT INTO installment_schedule (plan_id, due_month, amount_principal, amount_interest, amount_fee) VALUES ?`,
+            [scheduleValues]
+          );
+        }
       }
 
       await connection.commit();

@@ -2,6 +2,54 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 
+type CanonicalScheduleStatus = "pending" | "paid" | "overdue";
+
+function parseEnumValues(columnType: string): string[] {
+  const match = columnType.match(/^enum\((.*)\)$/i);
+  if (!match) return [];
+
+  return match[1]
+    .split(",")
+    .map((raw) => raw.trim().replace(/^'/, "").replace(/'$/, ""));
+}
+
+function mapScheduleStatusToSupportedValue(
+  desiredStatus: CanonicalScheduleStatus,
+  supportedValues: string[]
+): string | null {
+  const byPreference: Record<CanonicalScheduleStatus, string[]> = {
+    pending: ["pending", "unpaid", "due", "open", "waiting"],
+    paid: ["paid", "settled", "done", "lunas"],
+    overdue: ["overdue", "late", "past_due"],
+  };
+
+  const normalizedMap = new Map(supportedValues.map((value) => [value.toLowerCase(), value]));
+  for (const candidate of byPreference[desiredStatus]) {
+    const found = normalizedMap.get(candidate.toLowerCase());
+    if (found) return found;
+  }
+
+  return null;
+}
+
+async function resolveInstallmentScheduleStatusForDb(
+  desiredStatus: CanonicalScheduleStatus
+): Promise<string | null> {
+  const [rows] = await db.query("SHOW COLUMNS FROM installment_schedule LIKE 'status'");
+  const column = Array.isArray(rows) && rows.length > 0 ? (rows[0] as { Type?: string }) : null;
+
+  if (!column?.Type) {
+    return null;
+  }
+
+  const supportedValues = parseEnumValues(column.Type);
+  if (supportedValues.length === 0) {
+    return null;
+  }
+
+  return mapScheduleStatusToSupportedValue(desiredStatus, supportedValues);
+}
+
 /**
  * POST /api/installments/[planId]/pay
  * Mark a specific installment(s) as paid
@@ -12,6 +60,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ pla
     const { planId } = await params;
     const body = await req.json();
     const { scheduleIds, dueMonth } = body;
+    const paidScheduleStatus = await resolveInstallmentScheduleStatusForDb("paid");
 
     if (!scheduleIds && !dueMonth) {
       return NextResponse.json(
@@ -20,15 +69,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ pla
       );
     }
 
-    let query = "UPDATE installment_schedule SET status = 'paid', paid_at = NOW() WHERE plan_id = ?";
-    const queryParams: any[] = [planId];
+    let query = paidScheduleStatus
+      ? "UPDATE installment_schedule SET status = ?, paid_at = NOW() WHERE plan_id = ?"
+      : "UPDATE installment_schedule SET paid_at = NOW() WHERE plan_id = ?";
+    const queryParams: any[] = paidScheduleStatus ? [paidScheduleStatus, planId] : [planId];
 
     if (scheduleIds && Array.isArray(scheduleIds)) {
       query += " AND schedule_id IN (?)";
       queryParams.push(scheduleIds);
     } else if (dueMonth) {
-      query += " AND due_month = ?";
-      queryParams.push(dueMonth);
+      // Match by month token so it works for both DATE-based and YYYY-MM schemas.
+      query += " AND LEFT(CAST(due_month AS CHAR), 7) = ?";
+      queryParams.push(String(dueMonth).slice(0, 7));
     }
 
     const [result] = await db.query(query, queryParams);
@@ -40,7 +92,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ pla
 
     // Check if all installments are paid, update plan status to completed
     const [schedules] = await db.query(
-      "SELECT COUNT(*) as total, SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) as paid FROM installment_schedule WHERE plan_id = ?",
+      "SELECT COUNT(*) as total, SUM(CASE WHEN paid_at IS NOT NULL THEN 1 ELSE 0 END) as paid FROM installment_schedule WHERE plan_id = ?",
       [planId]
     );
 
