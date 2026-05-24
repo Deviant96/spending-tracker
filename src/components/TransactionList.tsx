@@ -6,6 +6,7 @@ import TransactionForm from "./TransactionForm";
 import { useTransactions } from "@/hooks/useTransactions";
 import { formatToRupiah } from "@/utils/currency";
 import { toCamelCase } from "@/utils/toCamelCase";
+import { Pencil, Trash2 } from "lucide-react";
 
 type Props = {
   transactions: Transaction[];
@@ -19,7 +20,6 @@ export default function TransactionList({ transactions, onDelete, onEdit, isLoad
   const [dialogDeleteOpen, setDialogDeleteOpen] = useState<boolean>(false);
   const [dialogEditOpen, setDialogEditOpen] = useState<boolean>(false);
   const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
-  const [transactionToEdit, setTransactionToEdit] = useState<string | null>(null);
   const [isLoadingTransaction, setIsLoadingTransaction] = useState<boolean>(false);
   const { getTransaction } = useTransactions();
   const [ singleTransaction, setSingleTransaction ] = useState<Transaction | undefined>(undefined);
@@ -76,7 +76,6 @@ export default function TransactionList({ transactions, onDelete, onEdit, isLoad
   const handleDialogEditClose = () => {
     setDialogEditOpen(false);
     setSingleTransaction(undefined);
-    setTransactionToEdit(null);
     setIsLoadingTransaction(false);
   }
 
@@ -95,7 +94,7 @@ export default function TransactionList({ transactions, onDelete, onEdit, isLoad
 
   const handleEdit = async (t: Transaction) => {
     try {
-      const result = await onEdit(t);
+      await onEdit(t);
     } catch (error) {
       console.error(error);
     } finally {
@@ -104,7 +103,14 @@ export default function TransactionList({ transactions, onDelete, onEdit, isLoad
   };
 
   if (!isLoaded) {
-    return <p>Loading...</p>
+    return (
+      <div className="rounded-2xl border border-zinc-200 bg-white/80 p-8 shadow-[0_16px_60px_-28px_rgba(0,0,0,0.35)] backdrop-blur-sm">
+        <div className="h-6 w-40 animate-pulse rounded bg-zinc-200" />
+        <div className="mt-4 h-10 w-full animate-pulse rounded-lg bg-zinc-100" />
+        <div className="mt-3 h-10 w-full animate-pulse rounded-lg bg-zinc-100" />
+        <div className="mt-3 h-10 w-full animate-pulse rounded-lg bg-zinc-100" />
+      </div>
+    );
   }
 
   if (hasLoadError && transactions.length === 0) {
@@ -112,10 +118,14 @@ export default function TransactionList({ transactions, onDelete, onEdit, isLoad
   }
   
   if (transactions.length === 0) {
-    return <p>No transactions yet.</p>;
+    return (
+      <div className="rounded-2xl border border-dashed border-zinc-300 bg-white/75 p-10 text-center shadow-[0_20px_70px_-40px_rgba(0,0,0,0.4)] backdrop-blur-sm">
+        <p className="text-lg font-semibold text-zinc-700">No transactions yet.</p>
+        <p className="mt-2 text-sm text-zinc-500">Try adding your first transaction from the button above.</p>
+      </div>
+    );
   }
 
-  // Replaced dayjs with native JavaScript date handling
   const formatDate = (dateString: string) => {
     const options: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'long', day: 'numeric' };
     return new Date(dateString).toLocaleDateString(undefined, options);
@@ -123,85 +133,95 @@ export default function TransactionList({ transactions, onDelete, onEdit, isLoad
 
   return (
     <>
-      <table
-        style={{
-          borderCollapse: "collapse",
-          width: "100%",
-          marginTop: "1rem",
-        }}
-      >
-        <thead>
-          <tr>
-            <th style={{ borderBottom: "1px solid #ccc", padding: "0.5rem" }}>Date</th>
-            <th style={{ borderBottom: "1px solid #ccc", padding: "0.5rem" }}>Amount</th>
-            <th style={{ borderBottom: "1px solid #ccc", padding: "0.5rem" }}>Category</th>
-            <th style={{ borderBottom: "1px solid #ccc", padding: "0.5rem" }}>Payment Method</th>
-            <th style={{ borderBottom: "1px solid #ccc", padding: "0.5rem" }}>Notes</th>
-            <th style={{ borderBottom: "1px solid #ccc", padding: "0.5rem" }}>Installment</th>
-            <th style={{ borderBottom: "1px solid #ccc", padding: "0.5rem" }}>Subscription</th>
-            <th style={{ borderBottom: "1px solid #ccc", padding: "0.5rem" }}>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {transactions.map((t) => (
-            <tr key={t.id}>
-              <td style={{ borderBottom: "1px solid #eee", padding: "0.5rem" }}>{formatDate(t.date)}</td>
-              <td style={{ borderBottom: "1px solid #eee", padding: "0.5rem" }}>
-                {formatToRupiah(t.amount)}
-              </td>
-              <td style={{ borderBottom: "1px solid #eee", padding: "0.5rem" }}>{t.category}</td>
-              <td style={{ borderBottom: "1px solid #eee", padding: "0.5rem" }}>{t.method}</td>
-              <td style={{ borderBottom: "1px solid #eee", padding: "0.5rem" }}>{t.notes}</td>
-              <td style={{ borderBottom: "1px solid #eee", padding: "0.5rem" }}>
-                {t.planMonths && (
-                  <div>
-                    {t.planMonths} months plan
-                  </div>
-                )}
-                {t.financingStatus === 'converted' && !t.planMonths && (
-                  <div>Converted</div>
-                )}
-              </td>
-              <td style={{ borderBottom: "1px solid #eee", padding: "0.5rem" }}>
-                {Boolean(t.isSubscription) && (
-                  <div>
-                    Subscription {t.subscriptionInterval ?  ` (${t.subscriptionInterval})` : ""}
-                  </div>
-                ) || (
-                  <div style={{ color: "rgb(0, 0, 0, 0.35)" }}>
-                    No
-                  </div>
-                )}
-              </td>
-              <td style={{ borderBottom: "1px solid #eee", padding: "0.5rem" }}>
-                <div style={{ display: "flex", gap: "0.5rem" }}>
-                  <button onClick={(e) => handleDialogDeleteOpen(t.id)} className="text-red-500 hover:text-red-700">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18.75A2.25 2.25 0 008.25 21h7.5A2.25 2.25 0 0018 18.75V7.5H6v11.25zM9.75 10.5v6m4.5-6v6M8.25 7.5V6A2.25 2.25 0 0110.5 3.75h3A2.25 2.25 0 0115.75 6v1.5m-9 0h10.5" />
-                    </svg>
-                  </button>
-                  <button onClick={() => handleDialogEditOpen(t.id)} className="text-blue-500 hover:text-blue-700">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487a2.25 2.25 0 113.182 3.182L7.061 20.652a4.5 4.5 0 01-1.691 1.07l-3.387 1.13 1.13-3.387a4.5 4.5 0 011.07-1.691L16.862 4.487z" />
-                    </svg>
-                  </button>
-                </div>
-              </td>
-            </tr>
-          ))} 
-        </tbody>
-      </table>
+      <div className="relative mt-6 overflow-hidden rounded-2xl border border-zinc-200/80 bg-white/85 shadow-[0_25px_80px_-40px_rgba(0,0,0,0.45)] backdrop-blur-sm">
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-gradient-to-r from-amber-100/50 via-transparent to-cyan-100/55" />
+
+        <div className="overflow-x-auto">
+          <table className="min-w-[920px] w-full border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-zinc-200 bg-zinc-50/80 text-left text-[11px] uppercase tracking-[0.18em] text-zinc-500">
+                <th className="px-4 py-3 font-semibold">Date</th>
+                <th className="px-4 py-3 font-semibold">Amount</th>
+                <th className="px-4 py-3 font-semibold">Category</th>
+                <th className="px-4 py-3 font-semibold">Payment Method</th>
+                <th className="px-4 py-3 font-semibold">Notes</th>
+                <th className="px-4 py-3 font-semibold">Installment</th>
+                <th className="px-4 py-3 font-semibold">Subscription</th>
+                <th className="px-4 py-3 font-semibold">Actions</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {transactions.map((t) => (
+                <tr key={t.id} className="border-b border-zinc-100 transition-colors hover:bg-zinc-50/80">
+                  <td className="px-4 py-4 text-zinc-700">{formatDate(t.date)}</td>
+                  <td className="px-4 py-4">
+                    <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
+                      {formatToRupiah(t.amount)}
+                    </span>
+                  </td>
+                  <td className="px-4 py-4 text-zinc-700">{t.category}</td>
+                  <td className="px-4 py-4 text-zinc-700">{t.method}</td>
+                  <td className="px-4 py-4 text-zinc-600">{t.notes || "-"}</td>
+                  <td className="px-4 py-4">
+                    {t.planMonths && (
+                      <span className="inline-flex items-center rounded-full bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 ring-1 ring-amber-200">
+                        {t.planMonths} months
+                      </span>
+                    )}
+                    {t.financingStatus === 'converted' && !t.planMonths && (
+                      <span className="inline-flex items-center rounded-full bg-fuchsia-50 px-2.5 py-1 text-xs font-semibold text-fuchsia-700 ring-1 ring-fuchsia-200">
+                        Converted
+                      </span>
+                    )}
+                    {!t.planMonths && t.financingStatus !== 'converted' && (
+                      <span className="text-zinc-400">-</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-4">
+                    {Boolean(t.isSubscription) ? (
+                      <span className="inline-flex items-center rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700 ring-1 ring-sky-200">
+                        {`Subscription${t.subscriptionInterval ? ` (${t.subscriptionInterval})` : ""}`}
+                      </span>
+                    ) : (
+                      <span className="text-zinc-400">No</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-4">
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleDialogEditOpen(t.id)}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 text-zinc-600 transition hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700"
+                        aria-label="Edit transaction"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDialogDeleteOpen(t.id)}
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-200 text-zinc-600 transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700"
+                        aria-label="Delete transaction"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
       {dialogDeleteOpen && (
-        <div className="fixed inset-0 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg p-6 max-w-sm w-full">
-            <h2 className="text-lg font-semibold mb-4">Confirm Deletion</h2>
-            <p className="text-gray-700 mb-4">Are you sure want to delete this record?</p>
-            <div className="flex justify-end gap-2">
-              <button onClick={handleDialogDeleteClose} className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4 backdrop-blur-[2px]">
+          <div className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl">
+            <h2 className="text-lg font-semibold text-zinc-900">Confirm Deletion</h2>
+            <p className="mt-2 text-sm text-zinc-600">Are you sure you want to delete this transaction? This action cannot be undone.</p>
+            <div className="mt-6 flex justify-end gap-2">
+              <button onClick={handleDialogDeleteClose} className="rounded-lg border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100">
                 Cancel
               </button>
-              <button onClick={handleDelete} className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600">
+              <button onClick={handleDelete} className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-700">
                 Delete
               </button>
             </div>
@@ -210,16 +230,20 @@ export default function TransactionList({ transactions, onDelete, onEdit, isLoad
       )}
 
       {dialogEditOpen && (
-        <div className="fixed inset-0 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-lg p-6 max-w-sm w-full">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 px-4 backdrop-blur-[2px]">
+          <div className="w-full max-h-[90vh] max-w-2xl overflow-auto rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl">
+            <div className="mb-4">
+              <h2 className="text-lg font-semibold text-zinc-900">Edit Transaction</h2>
+              <p className="text-sm text-zinc-500">Update fields and save changes.</p>
+            </div>
             {isLoadingTransaction ? (
               <div className="flex flex-col gap-4">
-                <div className="h-6 bg-gray-200 rounded animate-pulse"></div>
-                <div className="h-10 bg-gray-200 rounded animate-pulse"></div>
-                <div className="h-10 bg-gray-200 rounded animate-pulse"></div>
-                <div className="h-10 bg-gray-200 rounded animate-pulse"></div>
-                <div className="h-10 bg-gray-200 rounded animate-pulse"></div>
-                <div className="h-10 bg-gray-200 rounded animate-pulse"></div>
+                <div className="h-6 animate-pulse rounded bg-zinc-200"></div>
+                <div className="h-10 animate-pulse rounded bg-zinc-200"></div>
+                <div className="h-10 animate-pulse rounded bg-zinc-200"></div>
+                <div className="h-10 animate-pulse rounded bg-zinc-200"></div>
+                <div className="h-10 animate-pulse rounded bg-zinc-200"></div>
+                <div className="h-10 animate-pulse rounded bg-zinc-200"></div>
               </div>
             ) : (
               <TransactionForm
@@ -228,7 +252,7 @@ export default function TransactionList({ transactions, onDelete, onEdit, isLoad
               />
             )}
             <div className="flex justify-end gap-2 mt-4">
-              <button onClick={handleDialogEditClose} className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300">
+              <button onClick={handleDialogEditClose} className="rounded-lg border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100">
                 Cancel
               </button>
             </div>

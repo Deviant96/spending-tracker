@@ -2,7 +2,6 @@
 
 import { Filters } from "@/types";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { FormControl, FormField } from "./ui/form";
 import { Input } from "./ui/input";
 
 type Props = {
@@ -13,16 +12,17 @@ type Props = {
 };
 
 export default function TransactionFilters({ filters, setFilters, categories, years }: Props) {
-  console.log(categories);
   return (
-    <div style={{ marginBottom: "1rem", display: "flex", gap: "1rem" }}>
+    <div className="mb-6 rounded-2xl border border-zinc-200/80 bg-white/80 p-4 shadow-[0_18px_70px_-44px_rgba(0,0,0,0.45)] backdrop-blur-sm sm:p-5">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
       {/* Category Filter */}
-      <div className="flex flex-row flex-nowrap items-center gap-2.5">
-        <label htmlFor="category" className="font-semibold">Category:</label>
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="category" className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">Category</label>
         <Select
+          value={filters.category ?? "all"}
           onValueChange={value => setFilters({ ...filters, category: value })}
         >
-          <SelectTrigger>
+          <SelectTrigger className="w-full border-zinc-200 bg-white">
             <SelectValue placeholder="All" />
           </SelectTrigger>
           <SelectContent>
@@ -41,12 +41,13 @@ export default function TransactionFilters({ filters, setFilters, categories, ye
       </div>
 
       {/* Month Filter */}
-      <div className="flex flex-row flex-nowrap items-center gap-2.5">
-        <label htmlFor="month" className="font-semibold">Month:</label>
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="month" className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">Month</label>
         <Select
+          value={filters.month ?? "all"}
           onValueChange={value => setFilters({ ...filters, month: value })}
         >
-          <SelectTrigger>
+          <SelectTrigger className="w-full border-zinc-200 bg-white">
             <SelectValue placeholder="All" />
           </SelectTrigger>
           <SelectContent>
@@ -65,13 +66,13 @@ export default function TransactionFilters({ filters, setFilters, categories, ye
       </div>
 
       {/* Year Filter */}
-      <div className="flex flex-row flex-nowrap items-center gap-2.5">
-        <label htmlFor="year" className="font-semibold">Year:</label>
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="year" className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">Year</label>
         <Select
           value={filters.year ?? "all"}
           onValueChange={value => setFilters({ ...filters, year: value })}
         >
-          <SelectTrigger>
+          <SelectTrigger className="w-full border-zinc-200 bg-white">
             <SelectValue placeholder="All" />
           </SelectTrigger>
           <SelectContent>
@@ -90,12 +91,18 @@ export default function TransactionFilters({ filters, setFilters, categories, ye
       </div>
 
       {/* Search Filter */}
-      <Input
-        type="text"
-        placeholder="Search..."
-        value={filters.search}
-        onChange={e => setFilters({ ...filters, search: e.target.value })}
-      />
+      <div className="flex flex-col gap-1.5">
+        <label htmlFor="search" className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">Search</label>
+        <Input
+          id="search"
+          type="text"
+          placeholder="Search notes or category"
+          className="border-zinc-200 bg-white"
+          value={filters.search}
+          onChange={e => setFilters({ ...filters, search: e.target.value })}
+        />
+      </div>
+      </div>
     </div>
   );
 }

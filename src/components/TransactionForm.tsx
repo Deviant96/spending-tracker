@@ -263,6 +263,7 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
               helperText="MM/DD/YYYY"
               onDateChange={(date) => field.onChange(date ? toLocalDateString(date) : null)}
               autoFocus
+              showTodayButton
             />
           )}
         />

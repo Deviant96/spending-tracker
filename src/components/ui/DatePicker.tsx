@@ -21,13 +21,30 @@ type DatePickerProps = {
     helperText?: string;
     onDateChange?: (date: Date | undefined) => void;
     autoFocus: boolean;
+    showTodayButton?: boolean;
 };
 
-const DatePicker: React.FC<DatePickerProps> = ({ id = "date", value: externalValue, placeholder = "Select a date", helperText, onDateChange, autoFocus }) => {
+const DatePicker: React.FC<DatePickerProps> = ({
+    id = "date",
+    value: externalValue,
+    placeholder = "Select a date",
+    helperText,
+    onDateChange,
+    autoFocus,
+    showTodayButton = false,
+}) => {
     const [value, setValue] = useState<string>("");
     const [date, setDate] = useState<Date | undefined>(undefined);
     const [month, setMonth] = useState<Date | undefined>(undefined);
     const [open, setOpen] = useState<boolean>(false);
+
+    const handleSetToday = () => {
+        const today = new Date();
+        setDate(today);
+        setMonth(today);
+        setValue(formatDate(today));
+        onDateChange?.(today);
+    };
 
     useEffect(() => {
         if (!externalValue) {
@@ -108,6 +125,13 @@ const DatePicker: React.FC<DatePickerProps> = ({ id = "date", value: externalVal
                     </PopoverContent>
                 </Popover>
             </div>
+            {showTodayButton && (
+                <div>
+                    <Button type="button" variant="outline" size="sm" onClick={handleSetToday}>
+                        Today
+                    </Button>
+                </div>
+            )}
             {helperText && <p className="text-sm text-muted-foreground">{helperText}</p>}
         </div>
     );
