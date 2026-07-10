@@ -1,144 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { asResultHeader } from "@/lib/mysql-types";
+import {
+  normalizeDateForSql,
+  resolveFinancingStatusForDb,
+  resolveInstallmentScheduleStatusForDb,
+  resolveInstallmentStartMonthForDb,
+  isInstallmentDueMonthDateLike,
+  type CanonicalFinancingStatus,
+} from "@/lib/db-schema";
+import { generateInstallmentScheduleValues, insertInstallmentSchedule } from "@/lib/installments";
 import { randomUUID } from "crypto";
-
-function normalizeDateForSql(value: unknown): string | null {
-  if (!value) return null;
-
-  const raw = String(value).trim();
-  if (!raw) return null;
-
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-    return raw;
-  }
-
-  const parsed = new Date(raw);
-  if (Number.isNaN(parsed.getTime())) {
-    return null;
-  }
-
-  const year = parsed.getFullYear();
-  const month = String(parsed.getMonth() + 1).padStart(2, "0");
-  const day = String(parsed.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-type CanonicalFinancingStatus = "one_time" | "converted" | "subscription";
-
-function parseEnumValues(columnType: string): string[] {
-  const match = columnType.match(/^enum\((.*)\)$/i);
-  if (!match) return [];
-
-  return match[1]
-    .split(",")
-    .map((raw) => raw.trim().replace(/^'/, "").replace(/'$/, ""));
-}
-
-function mapToSupportedStatus(
-  desiredStatus: CanonicalFinancingStatus,
-  supportedValues: string[]
-): string | null {
-  const byPreference: Record<CanonicalFinancingStatus, string[]> = {
-    one_time: ["one_time", "single", "normal", "cash", "one-time", "once"],
-    converted: ["converted", "installment", "installments", "financed", "cicilan"],
-    subscription: ["subscription", "recurring", "repeat", "berlangganan"],
-  };
-
-  const normalizedMap = new Map(supportedValues.map((value) => [value.toLowerCase(), value]));
-  for (const candidate of byPreference[desiredStatus]) {
-    const found = normalizedMap.get(candidate.toLowerCase());
-    if (found) return found;
-  }
-
-  return null;
-}
-
-type CanonicalScheduleStatus = "pending" | "paid" | "overdue";
-
-function mapScheduleStatusToSupportedValue(
-  desiredStatus: CanonicalScheduleStatus,
-  supportedValues: string[]
-): string | null {
-  const byPreference: Record<CanonicalScheduleStatus, string[]> = {
-    pending: ["pending", "unpaid", "due", "open", "waiting"],
-    paid: ["paid", "settled", "done", "lunas"],
-    overdue: ["overdue", "late", "past_due"],
-  };
-
-  const normalizedMap = new Map(supportedValues.map((value) => [value.toLowerCase(), value]));
-  for (const candidate of byPreference[desiredStatus]) {
-    const found = normalizedMap.get(candidate.toLowerCase());
-    if (found) return found;
-  }
-
-  return null;
-}
-
-async function resolveFinancingStatusForDb(
-  connection: Awaited<ReturnType<typeof db.getConnection>>,
-  desiredStatus: CanonicalFinancingStatus
-): Promise<string | null> {
-  const [rows] = await connection.query("SHOW COLUMNS FROM transactions LIKE 'financing_status'");
-  const column = Array.isArray(rows) && rows.length > 0 ? (rows[0] as { Type?: string }) : null;
-
-  if (!column?.Type) {
-    return null;
-  }
-
-  const supportedValues = parseEnumValues(column.Type);
-  if (supportedValues.length === 0) {
-    return null;
-  }
-
-  return mapToSupportedStatus(desiredStatus, supportedValues);
-}
-
-async function resolveInstallmentStartMonthForDb(
-  connection: Awaited<ReturnType<typeof db.getConnection>>,
-  normalizedDate: string
-): Promise<string> {
-  const [rows] = await connection.query("SHOW COLUMNS FROM installment_plans LIKE 'start_month'");
-  const column = Array.isArray(rows) && rows.length > 0 ? (rows[0] as { Type?: string }) : null;
-
-  const yearMonth = normalizedDate.substring(0, 7);
-  if (!column?.Type) {
-    return yearMonth;
-  }
-
-  if (/^(date|datetime|timestamp)/i.test(column.Type)) {
-    return `${yearMonth}-01`;
-  }
-
-  return yearMonth;
-}
-
-async function isInstallmentDueMonthDateLike(
-  connection: Awaited<ReturnType<typeof db.getConnection>>
-): Promise<boolean> {
-  const [rows] = await connection.query("SHOW COLUMNS FROM installment_schedule LIKE 'due_month'");
-  const column = Array.isArray(rows) && rows.length > 0 ? (rows[0] as { Type?: string }) : null;
-  return Boolean(column?.Type && /^(date|datetime|timestamp)/i.test(column.Type));
-}
-
-async function resolveInstallmentScheduleStatusForDb(
-  connection: Awaited<ReturnType<typeof db.getConnection>>,
-  desiredStatus: CanonicalScheduleStatus
-): Promise<string | null> {
-  const [rows] = await connection.query("SHOW COLUMNS FROM installment_schedule LIKE 'status'");
-  const column = Array.isArray(rows) && rows.length > 0 ? (rows[0] as { Type?: string }) : null;
-
-  if (!column?.Type) {
-    return null;
-  }
-
-  const supportedValues = parseEnumValues(column.Type);
-  if (supportedValues.length === 0) {
-    return null;
-  }
-
-  return mapScheduleStatusToSupportedValue(desiredStatus, supportedValues);
-}
 
 export async function POST(req: NextRequest) {
   try {
@@ -168,13 +40,14 @@ export async function POST(req: NextRequest) {
     try {
       const transactionId = randomUUID();
 
-      // Determine financing status
       const willCreateInstallment = isInstallment && installmentMonths > 1;
-      const desiredStatus: CanonicalFinancingStatus = isSubscription ? 'subscription' : 
-                             willCreateInstallment ? 'converted' : 'one_time';
+      const desiredStatus: CanonicalFinancingStatus = isSubscription
+        ? "subscription"
+        : willCreateInstallment
+          ? "converted"
+          : "one_time";
       const dbFinancingStatus = await resolveFinancingStatusForDb(connection, desiredStatus);
 
-      // Insert Base Transaction
       if (dbFinancingStatus) {
         await connection.query(
           `INSERT INTO transactions 
@@ -210,82 +83,32 @@ export async function POST(req: NextRequest) {
         );
       }
 
-      // Handle Installment Logic
       if (isInstallment && installmentMonths > 1) {
         const months = Number(installmentMonths);
         const interest = Number(interestTotal) || 0;
         const fees = Number(feesTotal) || 0;
-        const monthlyPrincipal = Math.floor(amount / months);
-        const monthlyInterest = Math.floor(interest / months);
-        const monthlyFee = Math.floor(fees / months);
         const startMonth = await resolveInstallmentStartMonthForDb(connection, normalizedDate);
         const dueMonthIsDateLike = await isInstallmentDueMonthDateLike(connection);
         const pendingScheduleStatus = await resolveInstallmentScheduleStatusForDb(connection, "pending");
 
-        // Create Plan
         const [planResult] = await connection.query(
           `INSERT INTO installment_plans (transaction_id, principal, months, interest_total, fees_total, start_month) VALUES (?, ?, ?, ?, ?, ?)`,
           [transactionId, amount, months, interest, fees, startMonth]
         );
         const planId = asResultHeader(planResult).insertId;
 
-        // Generate Schedule
-        const scheduleValues: (string | number)[][] = [];
-        const currentDate = new Date(`${normalizedDate}T00:00:00`);
-        // Set to 1st of month to avoid edge cases like Jan 31 -> Feb 28/29
-        currentDate.setDate(1);
+        const scheduleValues = generateInstallmentScheduleValues({
+          planId,
+          months,
+          principal: Number(amount),
+          interestTotal: interest,
+          feesTotal: fees,
+          startDate: normalizedDate,
+          dueMonthIsDateLike,
+          pendingScheduleStatus,
+        });
 
-        for (let i = 0; i < months; i++) {
-          const year = currentDate.getFullYear();
-          const month = String(currentDate.getMonth() + 1).padStart(2, "0");
-          const dueMonth = dueMonthIsDateLike ? `${year}-${month}-01` : `${year}-${month}`;
-
-          // Handle remainder logic for last month
-          const isLast = i === months - 1;
-          const pAmount = isLast
-            ? amount - monthlyPrincipal * (months - 1)
-            : monthlyPrincipal;
-          const iAmount = isLast
-            ? interest - monthlyInterest * (months - 1)
-            : monthlyInterest;
-          const fAmount = isLast
-            ? fees - monthlyFee * (months - 1)
-            : monthlyFee;
-
-          if (pendingScheduleStatus) {
-            scheduleValues.push([
-              planId,
-              dueMonth,
-              pAmount,
-              iAmount,
-              fAmount,
-              pendingScheduleStatus,
-            ]);
-          } else {
-            scheduleValues.push([
-              planId,
-              dueMonth,
-              pAmount,
-              iAmount,
-              fAmount,
-            ]);
-          }
-
-          // Increment month
-          currentDate.setMonth(currentDate.getMonth() + 1);
-        }
-
-        if (pendingScheduleStatus) {
-          await connection.query(
-            `INSERT INTO installment_schedule (plan_id, due_month, amount_principal, amount_interest, amount_fee, status) VALUES ?`,
-            [scheduleValues]
-          );
-        } else {
-          await connection.query(
-            `INSERT INTO installment_schedule (plan_id, due_month, amount_principal, amount_interest, amount_fee) VALUES ?`,
-            [scheduleValues]
-          );
-        }
+        await insertInstallmentSchedule(connection, scheduleValues, pendingScheduleStatus);
       }
 
       await connection.commit();

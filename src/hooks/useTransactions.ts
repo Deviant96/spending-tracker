@@ -4,6 +4,10 @@ import { useState, useEffect } from "react";
 import { Transaction } from "@/types";
 import { toCamelCase } from "@/utils/toCamelCase";
 
+export type ActionResult =
+  | { success: true }
+  | { success: false; error: string };
+
 export function useTransactions() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoaded, setIsLoaded] = useState<boolean>(false);
@@ -54,7 +58,7 @@ export function useTransactions() {
     fetchTransactions();
   }, []);
 
-  const addTransaction = async (t: Transaction): Promise<boolean> => {
+  const addTransaction = async (t: Transaction): Promise<ActionResult> => {
     try {
       const res = await fetch("/api/transactions/add", {
         method: "POST",
@@ -65,18 +69,20 @@ export function useTransactions() {
       const data = await res.json();
       if (res.ok && data.success) {
         setTransactions((prev) => [...prev, { ...t }]);
-        return true;
+        return { success: true };
       }
 
-      console.error("Failed to add transaction:", data.error);
-      return false;
+      return {
+        success: false,
+        error: getErrorMessage(data, "Failed to save transaction. Please try again."),
+      };
     } catch (err) {
       console.error("Error adding transaction:", err);
-      return false;
+      return { success: false, error: "Unable to connect to the server. Please try again." };
     }
   };
 
-  const updateTransaction = async (t: Transaction) => {
+  const updateTransaction = async (t: Transaction): Promise<ActionResult> => {
     try {
       const res = await fetch(`/api/transactions/${t.id}`, {
         method: "PUT",
@@ -119,15 +125,20 @@ export function useTransactions() {
             };
           })
         );
-      } else {
-        console.error("Failed to update transaction:", data.error);
+        return { success: true };
       }
+
+      return {
+        success: false,
+        error: getErrorMessage(data, "Failed to update transaction. Please try again."),
+      };
     } catch (err) {
       console.error("Error updating transaction:", err);
+      return { success: false, error: "Unable to connect to the server. Please try again." };
     }
   };
 
-  const deleteTransaction = async (id: string) => {
+  const deleteTransaction = async (id: string): Promise<ActionResult> => {
     try {
       const res = await fetch(`/api/transactions/${id}`, {
         method: "DELETE",
@@ -135,15 +146,17 @@ export function useTransactions() {
 
       const data = await res.json();
       if (res.ok && data.success) {
-        setTransactions((prev) => 
-          prev.filter((transaction) => transaction.id !== id)
-        );
-        return true;
-      } else {
-        console.error("Failed to delete transaction:", data.error);
+        setTransactions((prev) => prev.filter((transaction) => transaction.id !== id));
+        return { success: true };
       }
+
+      return {
+        success: false,
+        error: getErrorMessage(data, "Failed to delete transaction. Please try again."),
+      };
     } catch (err) {
       console.error("Error deleting transaction:", err);
+      return { success: false, error: "Unable to connect to the server. Please try again." };
     }
   };
 
@@ -175,10 +188,10 @@ export function useTransactions() {
     }
   };
 
-  return { 
-    transactions, 
-    addTransaction, 
-    updateTransaction, 
+  return {
+    transactions,
+    addTransaction,
+    updateTransaction,
     deleteTransaction,
     getTransaction,
     reloadTransactions,

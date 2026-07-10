@@ -1,140 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-
-type CanonicalFinancingStatus = "one_time" | "converted" | "subscription";
-type CanonicalScheduleStatus = "pending" | "paid" | "overdue";
-
-function parseEnumValues(columnType: string): string[] {
-  const match = columnType.match(/^enum\((.*)\)$/i);
-  if (!match) return [];
-
-  return match[1]
-    .split(",")
-    .map((raw) => raw.trim().replace(/^'/, "").replace(/'$/, ""));
-}
-
-function mapToSupportedStatus(
-  desiredStatus: CanonicalFinancingStatus,
-  supportedValues: string[]
-): string | null {
-  const byPreference: Record<CanonicalFinancingStatus, string[]> = {
-    one_time: ["one_time", "single", "normal", "cash", "one-time", "once"],
-    converted: ["converted", "installment", "installments", "financed", "cicilan"],
-    subscription: ["subscription", "recurring", "repeat", "berlangganan"],
-  };
-
-  const normalizedMap = new Map(supportedValues.map((value) => [value.toLowerCase(), value]));
-  for (const candidate of byPreference[desiredStatus]) {
-    const found = normalizedMap.get(candidate.toLowerCase());
-    if (found) return found;
-  }
-
-  return null;
-}
-
-function mapScheduleStatusToSupportedValue(
-  desiredStatus: CanonicalScheduleStatus,
-  supportedValues: string[]
-): string | null {
-  const byPreference: Record<CanonicalScheduleStatus, string[]> = {
-    pending: ["pending", "unpaid", "due", "open", "waiting"],
-    paid: ["paid", "settled", "done", "lunas"],
-    overdue: ["overdue", "late", "past_due"],
-  };
-
-  const normalizedMap = new Map(supportedValues.map((value) => [value.toLowerCase(), value]));
-  for (const candidate of byPreference[desiredStatus]) {
-    const found = normalizedMap.get(candidate.toLowerCase());
-    if (found) return found;
-  }
-
-  return null;
-}
-
-async function resolveFinancingStatusForDb(
-  connection: Awaited<ReturnType<typeof db.getConnection>>,
-  desiredStatus: CanonicalFinancingStatus
-): Promise<string | null> {
-  const [rows] = await connection.query("SHOW COLUMNS FROM transactions LIKE 'financing_status'");
-  const column = Array.isArray(rows) && rows.length > 0 ? (rows[0] as { Type?: string }) : null;
-
-  if (!column?.Type) {
-    return null;
-  }
-
-  const supportedValues = parseEnumValues(column.Type);
-  if (supportedValues.length === 0) {
-    return null;
-  }
-
-  return mapToSupportedStatus(desiredStatus, supportedValues);
-}
-
-async function resolveInstallmentStartMonthForDb(
-  connection: Awaited<ReturnType<typeof db.getConnection>>,
-  normalizedDate: string
-): Promise<string> {
-  const [rows] = await connection.query("SHOW COLUMNS FROM installment_plans LIKE 'start_month'");
-  const column = Array.isArray(rows) && rows.length > 0 ? (rows[0] as { Type?: string }) : null;
-
-  const yearMonth = normalizedDate.substring(0, 7);
-  if (!column?.Type) {
-    return yearMonth;
-  }
-
-  if (/^(date|datetime|timestamp)/i.test(column.Type)) {
-    return `${yearMonth}-01`;
-  }
-
-  return yearMonth;
-}
-
-async function isInstallmentDueMonthDateLike(
-  connection: Awaited<ReturnType<typeof db.getConnection>>
-): Promise<boolean> {
-  const [rows] = await connection.query("SHOW COLUMNS FROM installment_schedule LIKE 'due_month'");
-  const column = Array.isArray(rows) && rows.length > 0 ? (rows[0] as { Type?: string }) : null;
-  return Boolean(column?.Type && /^(date|datetime|timestamp)/i.test(column.Type));
-}
-
-async function resolveInstallmentScheduleStatusForDb(
-  connection: Awaited<ReturnType<typeof db.getConnection>>,
-  desiredStatus: CanonicalScheduleStatus
-): Promise<string | null> {
-  const [rows] = await connection.query("SHOW COLUMNS FROM installment_schedule LIKE 'status'");
-  const column = Array.isArray(rows) && rows.length > 0 ? (rows[0] as { Type?: string }) : null;
-
-  if (!column?.Type) {
-    return null;
-  }
-
-  const supportedValues = parseEnumValues(column.Type);
-  if (supportedValues.length === 0) {
-    return null;
-  }
-
-  return mapScheduleStatusToSupportedValue(desiredStatus, supportedValues);
-}
-
-async function getInstallmentPlanIdColumn(): Promise<"plan_id" | "id"> {
-  const [planIdRows] = await db.query("SHOW COLUMNS FROM installment_plans LIKE 'plan_id'");
-  if (Array.isArray(planIdRows) && planIdRows.length > 0) {
-    return "plan_id";
-  }
-
-  const [idRows] = await db.query("SHOW COLUMNS FROM installment_plans LIKE 'id'");
-  if (Array.isArray(idRows) && idRows.length > 0) {
-    return "id";
-  }
-
-  throw new Error("installment_plans has no supported id column (expected plan_id or id)");
-}
+import { asResultHeader } from "@/lib/mysql-types";
+import {
+  getInstallmentPlanIdColumn,
+  normalizeDateForSql,
+  resolveFinancingStatusForDb,
+  resolveInstallmentScheduleStatusForDb,
+  resolveInstallmentStartMonthForDb,
+  isInstallmentDueMonthDateLike,
+  type CanonicalFinancingStatus,
+} from "@/lib/db-schema";
+import { generateInstallmentScheduleValues, insertInstallmentSchedule } from "@/lib/installments";
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const body = await req.json();
-    console.log("PUT transaction received body:", body);
-    
     const {
       date,
       amount,
@@ -149,18 +29,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       feesTotal,
     } = body;
 
-    // Format date to MySQL format (YYYY-MM-DD) without timezone conversion
-    let formattedDate = null;
-    if (date) {
-      const d = new Date(date);
-      const year = d.getFullYear();
-      const month = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
-      formattedDate = `${year}-${month}-${day}`;
-    }
-
+    const formattedDate = normalizeDateForSql(date);
     const { id } = await params;
-    console.log("Updating transaction with ID:", id);
 
     const shouldCreateInstallment = Boolean(isInstallment) && Number(installmentMonths || 0) > 1;
     const desiredStatus: CanonicalFinancingStatus = isSubscription
@@ -172,51 +42,48 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const connection = await db.getConnection();
     await connection.beginTransaction();
 
-    let result;
-
     try {
       const dbFinancingStatus = await resolveFinancingStatusForDb(connection, desiredStatus);
-      result = dbFinancingStatus
-        ? await connection.query(
-            `UPDATE transactions 
-             SET date=?, amount=?, category_id=?, method_id=?, notes=?, is_subscription=?, subscription_interval=?, financing_status=?
-             WHERE id=?`,
-            [
-              formattedDate,
-              amount,
-              categoryId,
-              methodId,
-              notes || null,
-              isSubscription ? 1 : 0,
-              subscriptionInterval || null,
-              dbFinancingStatus,
-              id,
-            ]
-          )
-        : await connection.query(
-            `UPDATE transactions 
-             SET date=?, amount=?, category_id=?, method_id=?, notes=?, is_subscription=?, subscription_interval=?
-             WHERE id=?`,
-            [
-              formattedDate,
-              amount,
-              categoryId,
-              methodId,
-              notes || null,
-              isSubscription ? 1 : 0,
-              subscriptionInterval || null,
-              id,
-            ]
-          );
+      if (dbFinancingStatus) {
+        await connection.query(
+          `UPDATE transactions 
+           SET date=?, amount=?, category_id=?, method_id=?, notes=?, is_subscription=?, subscription_interval=?, financing_status=?
+           WHERE id=?`,
+          [
+            formattedDate,
+            amount,
+            categoryId,
+            methodId,
+            notes || null,
+            isSubscription ? 1 : 0,
+            subscriptionInterval || null,
+            dbFinancingStatus,
+            id,
+          ]
+        );
+      } else {
+        await connection.query(
+          `UPDATE transactions 
+           SET date=?, amount=?, category_id=?, method_id=?, notes=?, is_subscription=?, subscription_interval=?
+           WHERE id=?`,
+          [
+            formattedDate,
+            amount,
+            categoryId,
+            methodId,
+            notes || null,
+            isSubscription ? 1 : 0,
+            subscriptionInterval || null,
+            id,
+          ]
+        );
+      }
 
       if (shouldCreateInstallment && formattedDate) {
-        const planIdColumn = await getInstallmentPlanIdColumn();
+        const planIdColumn = await getInstallmentPlanIdColumn(connection);
         const months = Number(installmentMonths);
         const interest = Number(interestTotal) || 0;
         const fees = Number(feesTotal) || 0;
-        const monthlyPrincipal = Math.floor(Number(amount) / months);
-        const monthlyInterest = Math.floor(interest / months);
-        const monthlyFee = Math.floor(fees / months);
         const startMonth = await resolveInstallmentStartMonthForDb(connection, formattedDate);
         const dueMonthIsDateLike = await isInstallmentDueMonthDateLike(connection);
         const pendingScheduleStatus = await resolveInstallmentScheduleStatusForDb(connection, "pending");
@@ -247,51 +114,21 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
              VALUES (?, ?, ?, ?, ?, ?, 'active')`,
             [id, amount, months, interest, fees, startMonth]
           );
-          planId = Number((planResult as { insertId: number }).insertId);
+          planId = asResultHeader(planResult).insertId;
         }
 
-        const scheduleValues = [];
-        const scheduleDate = new Date(`${formattedDate}T00:00:00`);
-        scheduleDate.setDate(1);
+        const scheduleValues = generateInstallmentScheduleValues({
+          planId,
+          months,
+          principal: Number(amount),
+          interestTotal: interest,
+          feesTotal: fees,
+          startDate: formattedDate,
+          dueMonthIsDateLike,
+          pendingScheduleStatus,
+        });
 
-        for (let i = 0; i < months; i++) {
-          const year = scheduleDate.getFullYear();
-          const month = String(scheduleDate.getMonth() + 1).padStart(2, "0");
-          const dueMonth = dueMonthIsDateLike ? `${year}-${month}-01` : `${year}-${month}`;
-          const isLast = i === months - 1;
-          const principalAmount = isLast
-            ? Number(amount) - monthlyPrincipal * (months - 1)
-            : monthlyPrincipal;
-          const interestAmount = isLast
-            ? interest - monthlyInterest * (months - 1)
-            : monthlyInterest;
-          const feeAmount = isLast
-            ? fees - monthlyFee * (months - 1)
-            : monthlyFee;
-
-          if (pendingScheduleStatus) {
-            scheduleValues.push([planId, dueMonth, principalAmount, interestAmount, feeAmount, pendingScheduleStatus]);
-          } else {
-            scheduleValues.push([planId, dueMonth, principalAmount, interestAmount, feeAmount]);
-          }
-          scheduleDate.setMonth(scheduleDate.getMonth() + 1);
-        }
-
-        if (pendingScheduleStatus) {
-          await connection.query(
-            `INSERT INTO installment_schedule
-             (plan_id, due_month, amount_principal, amount_interest, amount_fee, status)
-             VALUES ?`,
-            [scheduleValues]
-          );
-        } else {
-          await connection.query(
-            `INSERT INTO installment_schedule
-             (plan_id, due_month, amount_principal, amount_interest, amount_fee)
-             VALUES ?`,
-            [scheduleValues]
-          );
-        }
+        await insertInstallmentSchedule(connection, scheduleValues, pendingScheduleStatus);
       }
 
       await connection.commit();
@@ -302,8 +139,6 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       connection.release();
     }
 
-    console.log("PUT update result:", result);
-
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error("PUT transaction error:", err);
@@ -311,7 +146,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
     await db.query("DELETE FROM transactions WHERE id=?", [id]);
@@ -322,12 +157,10 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   }
 }
 
-
 export async function GET(_: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const planIdColumn = await getInstallmentPlanIdColumn();
-    console.log("GET transaction with ID:", id);
+    const planIdColumn = await getInstallmentPlanIdColumn(db);
     const [rows] = await db.query(
       `SELECT 
         t.id, t.date, t.amount, t.notes,
@@ -350,8 +183,6 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ id: st
       [id]
     );
     const record = Array.isArray(rows) ? rows[0] : null;
-
-    console.log("GET transaction found:", record);
 
     if (!record) {
       return NextResponse.json({ error: "Transaction not found" }, { status: 404 });

@@ -1,23 +1,10 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-
-async function getInstallmentPlanIdColumn(): Promise<"plan_id" | "id"> {
-  const [planIdRows] = await db.query("SHOW COLUMNS FROM installment_plans LIKE 'plan_id'");
-  if (Array.isArray(planIdRows) && planIdRows.length > 0) {
-    return "plan_id";
-  }
-
-  const [idRows] = await db.query("SHOW COLUMNS FROM installment_plans LIKE 'id'");
-  if (Array.isArray(idRows) && idRows.length > 0) {
-    return "id";
-  }
-
-  throw new Error("installment_plans has no supported id column (expected plan_id or id)");
-}
+import { getInstallmentPlanIdColumn } from "@/lib/db-schema";
 
 export async function GET() {
   try {
-    const planIdColumn = await getInstallmentPlanIdColumn();
+    const planIdColumn = await getInstallmentPlanIdColumn(db);
     const [rows] = await db.query(
       `SELECT 
         t.id, t.date, t.amount, t.notes, 

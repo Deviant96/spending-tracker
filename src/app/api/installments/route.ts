@@ -1,82 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { asResultHeader, asRows } from "@/lib/mysql-types";
-
-type CanonicalScheduleStatus = "pending" | "paid" | "overdue";
-
-function parseEnumValues(columnType: string): string[] {
-  const match = columnType.match(/^enum\((.*)\)$/i);
-  if (!match) return [];
-
-  return match[1]
-    .split(",")
-    .map((raw) => raw.trim().replace(/^'/, "").replace(/'$/, ""));
-}
-
-function mapScheduleStatusToSupportedValue(
-  desiredStatus: CanonicalScheduleStatus,
-  supportedValues: string[]
-): string | null {
-  const byPreference: Record<CanonicalScheduleStatus, string[]> = {
-    pending: ["pending", "unpaid", "due", "open", "waiting"],
-    paid: ["paid", "settled", "done", "lunas"],
-    overdue: ["overdue", "late", "past_due"],
-  };
-
-  const normalizedMap = new Map(supportedValues.map((value) => [value.toLowerCase(), value]));
-  for (const candidate of byPreference[desiredStatus]) {
-    const found = normalizedMap.get(candidate.toLowerCase());
-    if (found) return found;
-  }
-
-  return null;
-}
-
-async function resolveInstallmentStartMonthForDb(
-  connection: Awaited<ReturnType<typeof db.getConnection>>,
-  normalizedDate: string
-): Promise<string> {
-  const [rows] = await connection.query("SHOW COLUMNS FROM installment_plans LIKE 'start_month'");
-  const column = Array.isArray(rows) && rows.length > 0 ? (rows[0] as { Type?: string }) : null;
-
-  const yearMonth = normalizedDate.substring(0, 7);
-  if (!column?.Type) {
-    return yearMonth;
-  }
-
-  if (/^(date|datetime|timestamp)/i.test(column.Type)) {
-    return `${yearMonth}-01`;
-  }
-
-  return yearMonth;
-}
-
-async function isInstallmentDueMonthDateLike(
-  connection: Awaited<ReturnType<typeof db.getConnection>>
-): Promise<boolean> {
-  const [rows] = await connection.query("SHOW COLUMNS FROM installment_schedule LIKE 'due_month'");
-  const column = Array.isArray(rows) && rows.length > 0 ? (rows[0] as { Type?: string }) : null;
-  return Boolean(column?.Type && /^(date|datetime|timestamp)/i.test(column.Type));
-}
-
-async function resolveInstallmentScheduleStatusForDb(
-  connection: Awaited<ReturnType<typeof db.getConnection>>,
-  desiredStatus: CanonicalScheduleStatus
-): Promise<string | null> {
-  const [rows] = await connection.query("SHOW COLUMNS FROM installment_schedule LIKE 'status'");
-  const column = Array.isArray(rows) && rows.length > 0 ? (rows[0] as { Type?: string }) : null;
-
-  if (!column?.Type) {
-    return null;
-  }
-
-  const supportedValues = parseEnumValues(column.Type);
-  if (supportedValues.length === 0) {
-    return null;
-  }
-
-  return mapScheduleStatusToSupportedValue(desiredStatus, supportedValues);
-}
+import {
+  getInstallmentPlanIdColumn,
+  resolveInstallmentScheduleStatusForDb,
+  resolveInstallmentStartMonthForDb,
+  isInstallmentDueMonthDateLike,
+} from "@/lib/db-schema";
+import { generateInstallmentScheduleValues, insertInstallmentSchedule } from "@/lib/installments";
 
 /**
  * GET /api/installments
@@ -85,15 +16,17 @@ async function resolveInstallmentScheduleStatusForDb(
 export async function GET(req: NextRequest) {
   try {
     const connection = await db.getConnection();
+    const planIdColumn = await getInstallmentPlanIdColumn(connection);
     const paidScheduleStatus = (await resolveInstallmentScheduleStatusForDb(connection, "paid")) || "paid";
     connection.release();
+
     const { searchParams } = new URL(req.url);
     const transactionId = searchParams.get("transactionId");
     const status = searchParams.get("status");
 
     let query = `
       SELECT 
-        p.id as plan_id,
+        p.${planIdColumn} as plan_id,
         p.transaction_id,
         p.principal,
         p.months,
@@ -112,7 +45,7 @@ export async function GET(req: NextRequest) {
       INNER JOIN transactions t ON p.transaction_id = t.id
       LEFT JOIN categories c ON t.category_id = c.id
       LEFT JOIN payment_methods m ON t.method_id = m.id
-      LEFT JOIN installment_schedule s ON p.id = s.plan_id
+      LEFT JOIN installment_schedule s ON p.${planIdColumn} = s.plan_id
       WHERE 1=1
     `;
     const params: (string | number)[] = [paidScheduleStatus];
@@ -127,7 +60,7 @@ export async function GET(req: NextRequest) {
       params.push(status);
     }
 
-    query += " GROUP BY p.id ORDER BY p.created_at DESC";
+    query += ` GROUP BY p.${planIdColumn} ORDER BY p.created_at DESC`;
 
     const [rows] = await db.query(query, params);
     return NextResponse.json({ success: true, data: rows });
@@ -158,12 +91,11 @@ export async function POST(req: NextRequest) {
     await connection.beginTransaction();
 
     try {
-      // Check if transaction exists and is not already converted
       const [txRowsRaw] = await connection.query(
         "SELECT id, amount, date, financing_status FROM transactions WHERE id = ?",
         [transactionId]
       );
-      
+
       const txRows = asRows(txRowsRaw);
       if (txRows.length === 0) {
         throw new Error("Transaction not found");
@@ -175,76 +107,43 @@ export async function POST(req: NextRequest) {
       }
 
       const principal = Number(transaction.amount);
-      const startMonth = await resolveInstallmentStartMonthForDb(connection, String(transaction.date));
-
-      // Calculate monthly amounts
-      const monthlyPrincipal = Math.floor(principal / months);
-      const monthlyInterest = Math.floor(interestTotal / months);
-      const monthlyFee = Math.floor(feesTotal / months);
+      const normalizedDate = String(transaction.date).slice(0, 10);
+      const startMonth = await resolveInstallmentStartMonthForDb(connection, normalizedDate);
       const dueMonthIsDateLike = await isInstallmentDueMonthDateLike(connection);
       const pendingScheduleStatus = await resolveInstallmentScheduleStatusForDb(connection, "pending");
 
-      // Create installment plan
       const [planResult] = await connection.query(
         `INSERT INTO installment_plans 
         (transaction_id, principal, months, interest_total, fees_total, start_month, status) 
         VALUES (?, ?, ?, ?, ?, ?, 'active')`,
         [transactionId, principal, months, interestTotal, feesTotal, startMonth]
       );
-      
+
       const planId = asResultHeader(planResult).insertId;
 
-      // Generate installment schedule
-      const scheduleValues: (string | number)[][] = [];
-      const currentDate = new Date(String(transaction.date));
-      currentDate.setDate(1); // Set to 1st of month
+      const scheduleValues = generateInstallmentScheduleValues({
+        planId,
+        months,
+        principal,
+        interestTotal: Number(interestTotal),
+        feesTotal: Number(feesTotal),
+        startDate: normalizedDate,
+        dueMonthIsDateLike,
+        pendingScheduleStatus,
+      });
 
-      for (let i = 0; i < months; i++) {
-        const year = currentDate.getFullYear();
-        const month = String(currentDate.getMonth() + 1).padStart(2, "0");
-        const dueMonth = dueMonthIsDateLike ? `${year}-${month}-01` : `${year}-${month}`;
+      await insertInstallmentSchedule(connection, scheduleValues, pendingScheduleStatus);
 
-        // Handle remainder in last installment
-        const isLast = i === months - 1;
-        const pAmount = isLast ? principal - monthlyPrincipal * (months - 1) : monthlyPrincipal;
-        const iAmount = isLast ? interestTotal - monthlyInterest * (months - 1) : monthlyInterest;
-        const fAmount = isLast ? feesTotal - monthlyFee * (months - 1) : monthlyFee;
-
-        if (pendingScheduleStatus) {
-          scheduleValues.push([planId, dueMonth, pAmount, iAmount, fAmount, pendingScheduleStatus]);
-        } else {
-          scheduleValues.push([planId, dueMonth, pAmount, iAmount, fAmount]);
-        }
-        currentDate.setMonth(currentDate.getMonth() + 1);
-      }
-
-      if (pendingScheduleStatus) {
-        await connection.query(
-          `INSERT INTO installment_schedule 
-          (plan_id, due_month, amount_principal, amount_interest, amount_fee, status) 
-          VALUES ?`,
-          [scheduleValues]
-        );
-      } else {
-        await connection.query(
-          `INSERT INTO installment_schedule 
-          (plan_id, due_month, amount_principal, amount_interest, amount_fee) 
-          VALUES ?`,
-          [scheduleValues]
-        );
-      }
-
-      // Update transaction financing_status to 'converted'
       await connection.query(
         "UPDATE transactions SET financing_status = 'converted' WHERE id = ?",
         [transactionId]
       );
 
       await connection.commit();
-      return NextResponse.json({ 
-        success: true, 
+      return NextResponse.json({
+        success: true,
         planId,
-        message: "Transaction successfully converted to installment plan" 
+        message: "Transaction successfully converted to installment plan",
       });
     } catch (err) {
       await connection.rollback();

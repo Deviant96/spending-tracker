@@ -1,66 +1,17 @@
-// app/api/reports/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-
-type CanonicalScheduleStatus = "pending" | "paid" | "overdue";
-
-function parseEnumValues(columnType: string): string[] {
-  const match = columnType.match(/^enum\((.*)\)$/i);
-  if (!match) return [];
-
-  return match[1]
-    .split(",")
-    .map((raw) => raw.trim().replace(/^'/, "").replace(/'$/, ""));
-}
-
-function mapScheduleStatusToSupportedValue(
-  desiredStatus: CanonicalScheduleStatus,
-  supportedValues: string[]
-): string | null {
-  const byPreference: Record<CanonicalScheduleStatus, string[]> = {
-    pending: ["pending", "unpaid", "due", "open", "waiting"],
-    paid: ["paid", "settled", "done", "lunas"],
-    overdue: ["overdue", "late", "past_due"],
-  };
-
-  const normalizedMap = new Map(supportedValues.map((value) => [value.toLowerCase(), value]));
-  for (const candidate of byPreference[desiredStatus]) {
-    const found = normalizedMap.get(candidate.toLowerCase());
-    if (found) return found;
-  }
-
-  return null;
-}
-
-async function resolveInstallmentScheduleStatusForDb(
-  desiredStatus: CanonicalScheduleStatus
-): Promise<string | null> {
-  const [rows] = await db.query("SHOW COLUMNS FROM installment_schedule LIKE 'status'");
-  const column = Array.isArray(rows) && rows.length > 0 ? (rows[0] as { Type?: string }) : null;
-
-  if (!column?.Type) {
-    return null;
-  }
-
-  const supportedValues = parseEnumValues(column.Type);
-  if (supportedValues.length === 0) {
-    return null;
-  }
-
-  return mapScheduleStatusToSupportedValue(desiredStatus, supportedValues);
-}
+import { getInstallmentPlanIdColumn, resolveInstallmentScheduleStatusForDb } from "@/lib/db-schema";
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const period = searchParams.get("period") || "monthly"; // monthly | yearly
-    const mode = searchParams.get("mode") || "accrual"; // accrual | cashflow
+    const period = searchParams.get("period") || "monthly";
+    const mode = searchParams.get("mode") || "accrual";
     const start = searchParams.get("start");
     const end = searchParams.get("end");
     const category = searchParams.get("category");
     const method = searchParams.get("method");
 
-    // Determine grouping
     let selectPart = "";
     let groupPart = "";
 
@@ -78,20 +29,19 @@ export async function GET(req: NextRequest) {
     const params: (string | number)[] = [];
 
     if (mode === "cashflow" && period === "monthly") {
-      // CASHFLOW VIEW: Exclude converted transactions, include installment schedule payments
-      // This represents actual monthly cash outflows
-      const pendingScheduleStatus = (await resolveInstallmentScheduleStatusForDb("pending")) || "pending";
-      const paidScheduleStatus = (await resolveInstallmentScheduleStatusForDb("paid")) || "paid";
-      
-      const txWhere = ["t.financing_status != 'converted'"]; // Exclude converted transactions
-      const schWhere = ["s.status IN (?, ?)"]; // Include pending and paid installments
+      const pendingScheduleStatus = (await resolveInstallmentScheduleStatusForDb(db, "pending")) || "pending";
+      const paidScheduleStatus = (await resolveInstallmentScheduleStatusForDb(db, "paid")) || "paid";
+      const planIdColumn = await getInstallmentPlanIdColumn(db);
+
+      const txWhere = ["t.financing_status != 'converted'"];
+      const schWhere = ["s.status IN (?, ?)"];
       const txParams: (string | number)[] = [];
       const schParams: (string | number)[] = [pendingScheduleStatus, paidScheduleStatus];
 
       if (start && end) {
         txWhere.push("t.date BETWEEN ? AND ?");
         txParams.push(start, end);
-        
+
         schWhere.push("LEFT(CAST(s.due_month AS CHAR), 7) BETWEEN DATE_FORMAT(?, '%Y-%m') AND DATE_FORMAT(?, '%Y-%m')");
         schParams.push(start, end);
       }
@@ -99,7 +49,6 @@ export async function GET(req: NextRequest) {
       if (category) {
         txWhere.push("t.category_id = ?");
         txParams.push(category);
-        // For installment schedule, join back to transaction to filter by category
         schWhere.push("t.category_id = ?");
         schParams.push(category);
       }
@@ -107,7 +56,6 @@ export async function GET(req: NextRequest) {
       if (method) {
         txWhere.push("t.method_id = ?");
         txParams.push(method);
-        // For installment schedule, join back to transaction to filter by method
         schWhere.push("t.method_id = ?");
         schParams.push(method);
       }
@@ -115,7 +63,6 @@ export async function GET(req: NextRequest) {
       sql = `
         SELECT period, SUM(total_expense) as total_expense, SUM(transaction_count) as transaction_count 
         FROM (
-          -- Part 1: Non-converted transactions (one_time and subscription)
           SELECT 
             DATE_FORMAT(t.date, '%Y-%m') as period, 
             SUM(t.amount) as total_expense,
@@ -126,13 +73,12 @@ export async function GET(req: NextRequest) {
 
           UNION ALL
 
-          -- Part 2: Installment schedule payments (monthly obligations)
           SELECT 
             LEFT(CAST(s.due_month AS CHAR), 7) as period,
             SUM(s.amount_principal + s.amount_interest + IFNULL(s.amount_fee, 0)) as total_expense,
             COUNT(*) as transaction_count
           FROM installment_schedule s
-          INNER JOIN installment_plans p ON s.plan_id = p.id
+          INNER JOIN installment_plans p ON s.plan_id = p.${planIdColumn}
           INNER JOIN transactions t ON p.transaction_id = t.id
           WHERE ${schWhere.join(" AND ")}
           GROUP BY period
@@ -140,12 +86,9 @@ export async function GET(req: NextRequest) {
         GROUP BY period
         ORDER BY period ASC
       `;
-      
-      params.push(...txParams, ...schParams);
 
+      params.push(...txParams, ...schParams);
     } else {
-      // ACCRUAL VIEW: Show all transactions at purchase date (original logic)
-      // This represents when purchases were made, regardless of payment method
       sql = `
         SELECT 
           ${selectPart},

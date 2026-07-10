@@ -1,25 +1,25 @@
-// /app/api/reports/grouped/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { getInstallmentPlanIdColumn } from "@/lib/db-schema";
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const groupBy = searchParams.get("groupBy") || "month"; // default: month
-    const mode = searchParams.get("mode") || "accrual"; // accrual | cashflow
+    const groupBy = searchParams.get("groupBy") || "month";
+    const mode = searchParams.get("mode") || "accrual";
     const startDate = searchParams.get("startDate");
     const endDate = searchParams.get("endDate");
     const category = searchParams.get("category");
     const method = searchParams.get("method");
 
-    // CASHFLOW MODE: Exclude converted transactions, include installment payments
     if (mode === "cashflow" && groupBy === "category") {
+      const planIdColumn = await getInstallmentPlanIdColumn(db);
       const txParams: (string | number)[] = [];
       const schParams: (string | number)[] = [];
-      
+
       let txDateFilter = "";
       let schDateFilter = "";
-      
+
       if (startDate) {
         txDateFilter += " AND t.date >= ?";
         txParams.push(startDate);
@@ -36,7 +36,6 @@ export async function GET(req: NextRequest) {
       const sql = `
         SELECT category_name as period, SUM(amount) as total, COUNT(*) as count 
         FROM (
-          -- Part 1: Non-converted transactions
           SELECT 
             c.name as category_name,
             t.amount as amount
@@ -47,12 +46,11 @@ export async function GET(req: NextRequest) {
             
           UNION ALL
             
-          -- Part 2: Installment schedule payments
           SELECT 
             c.name as category_name,
             (s.amount_principal + s.amount_interest + IFNULL(s.amount_fee, 0)) as amount
           FROM installment_schedule s
-          JOIN installment_plans p ON s.plan_id = p.id
+          JOIN installment_plans p ON s.plan_id = p.${planIdColumn}
           JOIN transactions t ON p.transaction_id = t.id
           JOIN categories c ON t.category_id = c.id
           WHERE s.status IN ('pending', 'paid')
@@ -67,14 +65,14 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(rows);
     }
 
-    // CASHFLOW MODE: Group by method
     if (mode === "cashflow" && groupBy === "method") {
+      const planIdColumn = await getInstallmentPlanIdColumn(db);
       const txParams: (string | number)[] = [];
       const schParams: (string | number)[] = [];
-      
+
       let txDateFilter = "";
       let schDateFilter = "";
-      
+
       if (startDate) {
         txDateFilter += " AND t.date >= ?";
         txParams.push(startDate);
@@ -91,7 +89,6 @@ export async function GET(req: NextRequest) {
       const sql = `
         SELECT method_name as period, SUM(amount) as total, COUNT(*) as count 
         FROM (
-          -- Part 1: Non-converted transactions
           SELECT 
             m.name as method_name,
             t.amount as amount
@@ -102,12 +99,11 @@ export async function GET(req: NextRequest) {
             
           UNION ALL
             
-          -- Part 2: Installment schedule payments
           SELECT 
             m.name as method_name,
             (s.amount_principal + s.amount_interest + IFNULL(s.amount_fee, 0)) as amount
           FROM installment_schedule s
-          JOIN installment_plans p ON s.plan_id = p.id
+          JOIN installment_plans p ON s.plan_id = p.${planIdColumn}
           JOIN transactions t ON p.transaction_id = t.id
           JOIN payment_methods m ON t.method_id = m.id
           WHERE s.status IN ('pending', 'paid')
@@ -122,7 +118,6 @@ export async function GET(req: NextRequest) {
       return NextResponse.json(rows);
     }
 
-    // ACCRUAL MODE or other groupings: Use original logic
     let groupField = "";
     switch (groupBy) {
       case "year":

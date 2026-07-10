@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { asRows } from "@/lib/mysql-types";
+import { getInstallmentPlanIdColumn } from "@/lib/db-schema";
 
 /**
  * GET /api/installments/[planId]
@@ -9,11 +10,11 @@ import { asRows } from "@/lib/mysql-types";
 export async function GET(_: NextRequest, { params }: { params: Promise<{ planId: string }> }) {
   try {
     const { planId } = await params;
+    const planIdColumn = await getInstallmentPlanIdColumn(db);
 
-    // Get plan details
     const [planRowsRaw] = await db.query(
       `SELECT 
-        p.id as plan_id,
+        p.${planIdColumn} as plan_id,
         p.transaction_id,
         p.principal,
         p.months,
@@ -31,7 +32,7 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ planId
       INNER JOIN transactions t ON p.transaction_id = t.id
       LEFT JOIN categories c ON t.category_id = c.id
       LEFT JOIN payment_methods m ON t.method_id = m.id
-      WHERE p.id = ?`,
+      WHERE p.${planIdColumn} = ?`,
       [planId]
     );
 
@@ -40,7 +41,6 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ planId
       return NextResponse.json({ error: "Installment plan not found" }, { status: 404 });
     }
 
-    // Get schedule details
     const [scheduleRows] = await db.query(
       `SELECT 
         schedule_id,
@@ -84,7 +84,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ plan
       return NextResponse.json({ error: "Invalid status" }, { status: 400 });
     }
 
-    await db.query("UPDATE installment_plans SET status = ? WHERE plan_id = ?", [status, planId]);
+    const planIdColumn = await getInstallmentPlanIdColumn(db);
+    await db.query(`UPDATE installment_plans SET status = ? WHERE ${planIdColumn} = ?`, [status, planId]);
 
     return NextResponse.json({ success: true, message: "Installment plan updated" });
   } catch (err) {
@@ -100,13 +101,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ plan
 export async function DELETE(_: NextRequest, { params }: { params: Promise<{ planId: string }> }) {
   try {
     const { planId } = await params;
+    const planIdColumn = await getInstallmentPlanIdColumn(db);
     const connection = await db.getConnection();
-    
+
     await connection.beginTransaction();
     try {
-      // Get transaction ID before deleting
       const [planRowsRaw] = await connection.query(
-        "SELECT transaction_id FROM installment_plans WHERE plan_id = ?",
+        `SELECT transaction_id FROM installment_plans WHERE ${planIdColumn} = ?`,
         [planId]
       );
 
@@ -117,22 +118,17 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ pla
 
       const transactionId = String(planRows[0].transaction_id);
 
-      // Delete schedule (cascades automatically via FK, but explicit for clarity)
       await connection.query("DELETE FROM installment_schedule WHERE plan_id = ?", [planId]);
-
-      // Delete plan
-      await connection.query("DELETE FROM installment_plans WHERE plan_id = ?", [planId]);
-
-      // Revert transaction to one_time
+      await connection.query(`DELETE FROM installment_plans WHERE ${planIdColumn} = ?`, [planId]);
       await connection.query(
         "UPDATE transactions SET financing_status = 'one_time' WHERE id = ?",
         [transactionId]
       );
 
       await connection.commit();
-      return NextResponse.json({ 
-        success: true, 
-        message: "Installment plan deleted and transaction reverted" 
+      return NextResponse.json({
+        success: true,
+        message: "Installment plan deleted and transaction reverted",
       });
     } catch (err) {
       await connection.rollback();
