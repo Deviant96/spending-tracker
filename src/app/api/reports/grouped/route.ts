@@ -14,8 +14,8 @@ export async function GET(req: NextRequest) {
 
     // CASHFLOW MODE: Exclude converted transactions, include installment payments
     if (mode === "cashflow" && groupBy === "category") {
-      const txParams: any[] = [];
-      const schParams: any[] = [];
+      const txParams: (string | number)[] = [];
+      const schParams: (string | number)[] = [];
       
       let txDateFilter = "";
       let schDateFilter = "";
@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
         schParams.push(endDate);
       }
 
-      let sql = `
+      const sql = `
         SELECT category_name as period, SUM(amount) as total, COUNT(*) as count 
         FROM (
           -- Part 1: Non-converted transactions
@@ -69,8 +69,8 @@ export async function GET(req: NextRequest) {
 
     // CASHFLOW MODE: Group by method
     if (mode === "cashflow" && groupBy === "method") {
-      const txParams: any[] = [];
-      const schParams: any[] = [];
+      const txParams: (string | number)[] = [];
+      const schParams: (string | number)[] = [];
       
       let txDateFilter = "";
       let schDateFilter = "";
@@ -88,7 +88,7 @@ export async function GET(req: NextRequest) {
         schParams.push(endDate);
       }
 
-      let sql = `
+      const sql = `
         SELECT method_name as period, SUM(amount) as total, COUNT(*) as count 
         FROM (
           -- Part 1: Non-converted transactions
@@ -148,7 +148,7 @@ export async function GET(req: NextRequest) {
       LEFT JOIN payment_methods m ON t.method_id = m.id
       WHERE 1=1
     `;
-    const params: any[] = [];
+    const params: (string | number)[] = [];
 
     if (startDate) {
       query += " AND t.date >= ?";

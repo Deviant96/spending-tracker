@@ -17,34 +17,35 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 const COLORS = ["#8884d8", "#82ca9d", "#ffc658", "#ff7f50", "#a4de6c"];
 
+type MonthlyChartPoint = { month: string; spending: number };
+type CategoryChartPoint = { name: string; value: number };
+
 export default function AnalyticsCharts() {
   const [mode, setMode] = useState<"accrual" | "cashflow">("cashflow");
-  const [monthlyData, setMonthlyData] = useState<any[]>([]);
-  const [categoryData, setCategoryData] = useState<any[]>([]);
+  const [monthlyData, setMonthlyData] = useState<MonthlyChartPoint[]>([]);
+  const [categoryData, setCategoryData] = useState<CategoryChartPoint[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     async function fetchData() {
       setIsLoading(true);
       try {
-        // Fetch Monthly Data
         const resMonthly = await fetch(`/api/reports?period=monthly&mode=${mode}`);
         const dataMonthly = await resMonthly.json();
         if (dataMonthly.success && Array.isArray(dataMonthly.data)) {
           setMonthlyData(
-            dataMonthly.data.map((d: any) => ({
+            dataMonthly.data.map((d: { period: string; total_expense: number }) => ({
               month: d.period,
               spending: Number(d.total_expense) || 0,
             }))
           );
         }
 
-        // Fetch Category Data
         const resCategory = await fetch(`/api/reports/grouped?groupBy=category&mode=${mode}`);
         const dataCategory = await resCategory.json();
         if (Array.isArray(dataCategory)) {
           setCategoryData(
-            dataCategory.map((d: any) => ({
+            dataCategory.map((d: { period: string; total: number }) => ({
               name: d.period,
               value: Number(d.total),
             }))
@@ -66,7 +67,10 @@ export default function AnalyticsCharts() {
         <h2>Analytics</h2>
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium">View Mode:</span>
-          <Select value={mode} onValueChange={(v: any) => setMode(v)}>
+          <Select
+            value={mode}
+            onValueChange={(value) => setMode(value as "accrual" | "cashflow")}
+          >
             <SelectTrigger className="w-[180px]">
               <SelectValue placeholder="Select mode" />
             </SelectTrigger>
@@ -84,7 +88,6 @@ export default function AnalyticsCharts() {
         <p>No data available.</p>
       ) : (
         <div style={{ display: "flex", gap: "2rem", flexWrap: "wrap" }}>
-          {/* Monthly Spending */}
           <div style={{ flex: 1, minWidth: "300px", height: 300 }}>
             <h3>Monthly Spending</h3>
             <ResponsiveContainer width="100%" height="100%">
@@ -97,7 +100,6 @@ export default function AnalyticsCharts() {
             </ResponsiveContainer>
           </div>
 
-          {/* Category Breakdown */}
           <div style={{ flex: 1, minWidth: "300px", height: 300 }}>
             <h3>Category Breakdown</h3>
             <ResponsiveContainer width="100%" height="100%">
@@ -111,7 +113,7 @@ export default function AnalyticsCharts() {
                 >
                   {categoryData.map((entry, index) => (
                     <Cell
-                      key={`cell-${index}`}
+                      key={`cell-${entry.name}`}
                       fill={COLORS[index % COLORS.length]}
                     />
                   ))}

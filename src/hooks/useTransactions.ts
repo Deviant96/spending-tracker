@@ -54,7 +54,7 @@ export function useTransactions() {
     fetchTransactions();
   }, []);
 
-  const addTransaction = async (t: Transaction) => {
+  const addTransaction = async (t: Transaction): Promise<boolean> => {
     try {
       const res = await fetch("/api/transactions/add", {
         method: "POST",
@@ -65,11 +65,14 @@ export function useTransactions() {
       const data = await res.json();
       if (res.ok && data.success) {
         setTransactions((prev) => [...prev, { ...t }]);
-      } else {
-        console.error("Failed to add transaction:", data.error);
+        return true;
       }
+
+      console.error("Failed to add transaction:", data.error);
+      return false;
     } catch (err) {
       console.error("Error adding transaction:", err);
+      return false;
     }
   };
 
@@ -89,11 +92,11 @@ export function useTransactions() {
           const detailRes = await fetch(`/api/transactions/${t.id}`);
           const detailData = await detailRes.json();
           if (detailRes.ok && detailData?.data) {
-            const normalized = toCamelCase(detailData.data);
+            const normalized = toCamelCase(detailData.data as Record<string, unknown>);
             refreshed = {
               ...normalized,
               isSubscription: Boolean(normalized.isSubscription),
-            };
+            } as Transaction;
           }
         } catch (detailErr) {
           console.error("Failed to refresh updated transaction:", detailErr);
@@ -126,11 +129,8 @@ export function useTransactions() {
 
   const deleteTransaction = async (id: string) => {
     try {
-      const res = await fetch(`/api/transactions/delete`, {
-        method: "POST",
-        body: JSON.stringify({
-          id: id,
-        })
+      const res = await fetch(`/api/transactions/${id}`, {
+        method: "DELETE",
       });
 
       const data = await res.json();

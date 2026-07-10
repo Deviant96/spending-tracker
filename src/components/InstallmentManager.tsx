@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { InstallmentPlan, InstallmentSchedule } from "@/types";
 import { formatToRupiah } from "@/utils/currency";
 import { Button } from "./ui/button";
@@ -16,11 +16,7 @@ export default function InstallmentManager({ transactionId, showAll = false }: P
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchPlans();
-  }, [transactionId, showAll]);
-
-  const fetchPlans = async () => {
+  const fetchPlans = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
@@ -42,7 +38,11 @@ export default function InstallmentManager({ transactionId, showAll = false }: P
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [transactionId]);
+
+  useEffect(() => {
+    fetchPlans();
+  }, [fetchPlans, showAll]);
 
   const fetchPlanDetails = async (planId: number) => {
     try {

@@ -1,6 +1,6 @@
-// app/api/installments/[planId]/pay/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { asResultHeader, asRows } from "@/lib/mysql-types";
 
 type CanonicalScheduleStatus = "pending" | "paid" | "overdue";
 
@@ -72,7 +72,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ pla
     let query = paidScheduleStatus
       ? "UPDATE installment_schedule SET status = ?, paid_at = NOW() WHERE plan_id = ?"
       : "UPDATE installment_schedule SET paid_at = NOW() WHERE plan_id = ?";
-    const queryParams: any[] = paidScheduleStatus ? [paidScheduleStatus, planId] : [planId];
+    const queryParams: (string | number | number[])[] = paidScheduleStatus
+      ? [paidScheduleStatus, planId]
+      : [planId];
 
     if (scheduleIds && Array.isArray(scheduleIds)) {
       query += " AND schedule_id IN (?)";
@@ -83,29 +85,27 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ pla
       queryParams.push(String(dueMonth).slice(0, 7));
     }
 
-    const [result] = await db.query(query, queryParams);
-
-    // @ts-ignore
+    const [updateResult] = await db.query(query, queryParams);
+    const result = asResultHeader(updateResult);
     if (result.affectedRows === 0) {
       return NextResponse.json({ error: "No installments found to update" }, { status: 404 });
     }
 
     // Check if all installments are paid, update plan status to completed
-    const [schedules] = await db.query(
+    const [schedulesRaw] = await db.query(
       "SELECT COUNT(*) as total, SUM(CASE WHEN paid_at IS NOT NULL THEN 1 ELSE 0 END) as paid FROM installment_schedule WHERE plan_id = ?",
       [planId]
     );
 
-    // @ts-ignore
-    const { total, paid } = schedules[0];
-    if (total === paid) {
+    const schedules = asRows(schedulesRaw);
+    const { total, paid } = schedules[0] ?? {};
+    if (Number(total) === Number(paid)) {
       await db.query("UPDATE installment_plans SET status = 'completed' WHERE plan_id = ?", [planId]);
     }
 
     return NextResponse.json({
       success: true,
       message: "Installment(s) marked as paid",
-      // @ts-ignore
       affectedRows: result.affectedRows,
     });
   } catch (err) {

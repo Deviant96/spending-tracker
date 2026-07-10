@@ -44,6 +44,7 @@ vi.mock("next/server", () => ({
 }));
 
 import { POST } from "./route";
+import type { NextRequest } from "next/server";
 
 describe("POST /api/transactions/add", () => {
   beforeEach(() => {
@@ -76,9 +77,9 @@ describe("POST /api/transactions/add", () => {
         feesTotal: 100,
         isSubscription: false,
       }),
-    };
+    } as Pick<NextRequest, "json">;
 
-    const response = await POST(req as any);
+    const response = await POST(req as NextRequest);
     const body = await response.json();
 
     expect(response.status).toBe(200);

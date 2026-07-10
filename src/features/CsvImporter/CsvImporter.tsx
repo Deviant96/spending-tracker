@@ -5,15 +5,26 @@ import Papa from "papaparse";
 import { Transaction } from "@/types";
 import { CsvPreview } from "./components/CsvPreview";
 import { H3 } from "@/components/typography/Headings";
+import type { ImportRowResult } from "@/app/api/import/route";
+
+type ImportResponse = {
+  success: boolean;
+  successCount: number;
+  failureCount: number;
+  count: number;
+  results: ImportRowResult[];
+};
 
 export default function CsvImporter() {
   const [preview, setPreview] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(false);
-  const [imported, setImported] = useState(false);
+  const [importResults, setImportResults] = useState<ImportResponse | null>(null);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    setImportResults(null);
 
     Papa.parse(file, {
       header: true,
@@ -27,6 +38,8 @@ export default function CsvImporter() {
 
   const handleImport = async () => {
     setLoading(true);
+    setImportResults(null);
+
     try {
       const res = await fetch("/api/import", {
         method: "POST",
@@ -34,11 +47,13 @@ export default function CsvImporter() {
         body: JSON.stringify(preview),
       });
 
-      if (res.ok) {
-        setImported(true);
-        setPreview([]);
-      } else {
-        alert("Failed to import transactions.");
+      const data: ImportResponse = await res.json();
+      setImportResults(data);
+
+      if (data.successCount > 0) {
+        setPreview((prev) =>
+          prev.filter((_, index) => !data.results.find((r) => r.index === index && r.success))
+        );
       }
     } catch (err) {
       console.error(err);
@@ -75,15 +90,32 @@ export default function CsvImporter() {
             {loading ? "Importing..." : "Confirm Import"}
           </button>
 
-          <CsvPreview
-            preview={preview}
-            handleImport={handleImport}
-            loading={loading}
-          />
+          <CsvPreview preview={preview} />
         </>
       )}
 
-      {imported && <p>✅ Transactions successfully imported!</p>}
+      {importResults && (
+        <div className="mt-4 p-4 rounded-lg border border-gray-200 bg-gray-50">
+          <p className="font-medium">
+            Import complete: {importResults.successCount} succeeded,{" "}
+            {importResults.failureCount} failed (of {importResults.count})
+          </p>
+          {importResults.failureCount > 0 && (
+            <ul className="mt-2 text-sm text-red-700 list-disc ml-5">
+              {importResults.results
+                .filter((r) => !r.success)
+                .map((r) => (
+                  <li key={r.index}>
+                    Row {r.index + 1}: {r.error}
+                  </li>
+                ))}
+            </ul>
+          )}
+          {importResults.success && (
+            <p className="mt-2 text-green-700">All rows imported successfully.</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

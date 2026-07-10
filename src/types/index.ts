@@ -3,11 +3,17 @@ export type Transaction = {
   date: string;
   amount: number;
   categoryId?: number;
-  methodId?: number;
+  methodId?: string | number;
   category?: string;
   method?: string;
   notes?: string;
   
+  // Installment form fields (used when creating/updating)
+  isInstallment?: boolean;
+  installmentMonths?: number;
+  interestTotal?: number;
+  feesTotal?: number;
+
   // Financing status
   financingStatus?: 'one_time' | 'converted' | 'subscription';
   

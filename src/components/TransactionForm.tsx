@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useForm, Controller } from "react-hook-form";
+import { useForm, Controller, FieldErrors } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Category, PaymentMethod, Transaction } from "@/types";
@@ -21,25 +21,30 @@ import { Checkbox } from "@/components/ui/checkbox";
 import DatePicker from "./ui/DatePicker";
 import { Skeleton } from "./ui/skeleton";
 
-const transactionSchema = z.object({
-  id: z.string().uuid(),
-  date: z.string().nullable(),
-  amount: z.number().min(1, "Amount must be greater than 0"),
-  categoryId: z.string().nonempty("Category is required"),
-  methodId: z.string().nonempty("Payment method is required"),
-  notes: z.string().optional(),
-  isInstallment: z.boolean(),
-  installmentMonths: z.number().optional(),
-  interestTotal: z.number().optional(),
-  feesTotal: z.number().optional(),
-  isSubscription: z.boolean(),
-  subscriptionInterval: z.enum(["weekly", "monthly", "yearly"]).optional(),
-});
+const transactionSchema = z
+  .object({
+    id: z.string().uuid(),
+    date: z.string().nullable(),
+    amount: z.number().min(1, "Amount must be greater than 0"),
+    categoryId: z.string().nonempty("Category is required"),
+    methodId: z.string().nonempty("Payment method is required"),
+    notes: z.string().optional(),
+    isInstallment: z.boolean(),
+    installmentMonths: z.number().optional(),
+    interestTotal: z.number().optional(),
+    feesTotal: z.number().optional(),
+    isSubscription: z.boolean(),
+    subscriptionInterval: z.enum(["weekly", "monthly", "yearly"]).optional(),
+  })
+  .refine((data) => !(data.isInstallment && data.isSubscription), {
+    message: "A transaction cannot be both an installment and a subscription",
+    path: ["isSubscription"],
+  });
 
 type TransactionFormValues = z.infer<typeof transactionSchema>;
 
 type Props = {
-  onSubmit: (t: any) => void;
+  onSubmit: (t: Transaction) => void | Promise<void>;
   initialTransaction?: Transaction | null;
 };
 
@@ -165,12 +170,24 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
   }, [categories, paymentMethods, initialTransaction, setValue]);
 
   const onSubmitHandler = (data: TransactionFormValues) => {
-    console.log("Form submitted with data:", data);
-    onSubmit({ ...data, date: data.date || "" });
+    onSubmit({
+      id: data.id,
+      date: data.date || "",
+      amount: data.amount,
+      categoryId: Number(data.categoryId),
+      methodId: data.methodId,
+      notes: data.notes,
+      isInstallment: data.isInstallment,
+      installmentMonths: data.installmentMonths,
+      interestTotal: data.interestTotal,
+      feesTotal: data.feesTotal,
+      isSubscription: data.isSubscription,
+      subscriptionInterval: data.subscriptionInterval,
+    });
   };
 
-  const onError = (errors: any) => {
-    console.error("Form validation errors:", errors);
+  const onError = (formErrors: FieldErrors<TransactionFormValues>) => {
+    console.error("Form validation errors:", formErrors);
   };
 
   const fetchCategories = async () => {
@@ -205,10 +222,6 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
   }
 
   useEffect(() => {
-    console.log(isSubscription);
-  }, [isSubscription]); 
-
-  useEffect(() => {
     if (!isInstallment) {
       setValue("installmentMonths", undefined);
       setValue("interestTotal", undefined);
@@ -238,7 +251,7 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
         <div className="p-4 bg-red-100 border border-red-400 text-red-700 rounded">
           <h3 className="font-bold">Validation Errors:</h3>
           <ul className="list-disc ml-5">
-            {Object.entries(errors).map(([field, error]: [string, any]) => (
+            {Object.entries(errors).map(([field, error]) => (
               <li key={field}>
                 {field}: {error?.message || "Invalid"}
               </li>
@@ -333,6 +346,10 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
           control={control}
           render={({ field }) => (
             <Select onValueChange={field.onChange} value={field.value ? String(field.value) : undefined}>
+              {isLoadingPaymentMethods ? (
+                <Skeleton className="h-[36px] w-full rounded-full" />
+              ) : (
+                <>
               <SelectTrigger>
                 <SelectValue placeholder="Select a payment method" />
               </SelectTrigger>
@@ -343,6 +360,8 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
                   </SelectItem>
                 ))}
               </SelectContent>
+                </>
+              )}
             </Select>
           )}
         />
@@ -365,7 +384,15 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
             <div className="flex items-center space-x-2">
               <Checkbox
                 checked={field.value}
-                onCheckedChange={field.onChange} // very important
+                disabled={isSubscription}
+                onCheckedChange={(checked) => {
+                  const isChecked = checked === true;
+                  field.onChange(isChecked);
+                  if (isChecked) {
+                    setValue("isSubscription", false);
+                    setValue("subscriptionInterval", undefined);
+                  }
+                }}
                 id="isInstallment"
               />
               <Label htmlFor="isInstallment">Is Installment?</Label>
@@ -442,7 +469,17 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
             <div className="flex items-center space-x-2">
               <Checkbox
                 checked={field.value}
-                onCheckedChange={field.onChange} // very important
+                disabled={isInstallment}
+                onCheckedChange={(checked) => {
+                  const isChecked = checked === true;
+                  field.onChange(isChecked);
+                  if (isChecked) {
+                    setValue("isInstallment", false);
+                    setValue("installmentMonths", undefined);
+                    setValue("interestTotal", undefined);
+                    setValue("feesTotal", undefined);
+                  }
+                }}
                 id="isSubscription"
               />
               <Label htmlFor="isSubscription">Is Subscription?</Label>

@@ -3,36 +3,72 @@ import { db } from "@/lib/db";
 import { randomUUID } from "crypto";
 import { Transaction } from "@/types";
 
+export type ImportRowResult = {
+  index: number;
+  success: boolean;
+  id?: string;
+  error?: string;
+};
+
 export async function POST(req: NextRequest) {
-    const transactions: Transaction[] = await req.json();
+  let transactions: Transaction[];
 
   try {
-    for (const r of transactions) {
-      // Determine financing status
-      const isSubscription = r.isSubscription === true;
-      const financingStatus = isSubscription ? 'subscription' : 'one_time';
-      
+    transactions = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  if (!Array.isArray(transactions)) {
+    return NextResponse.json({ error: "Expected an array of transactions" }, { status: 400 });
+  }
+
+  const results: ImportRowResult[] = [];
+
+  for (let index = 0; index < transactions.length; index++) {
+    const row = transactions[index];
+
+    try {
+      if (!row.date || row.amount == null || Number.isNaN(Number(row.amount))) {
+        throw new Error("Invalid date or amount");
+      }
+
+      const id = randomUUID();
+      const isSubscription = row.isSubscription === true;
+      const financingStatus = isSubscription ? "subscription" : "one_time";
+
       await db.query(
         `INSERT INTO transactions 
         (id, date, amount, category_id, method_id, notes, is_subscription, subscription_interval, financing_status) 
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
-          randomUUID(),
-          r.date,
-          Number(r.amount),
-          r.categoryId,
-          r.methodId,
-          r.notes || null,
+          id,
+          row.date,
+          Number(row.amount),
+          row.categoryId ?? null,
+          row.methodId ?? null,
+          row.notes || null,
           isSubscription ? 1 : 0,
-          r.subscriptionInterval || null,
+          row.subscriptionInterval || null,
           financingStatus,
         ]
       );
-    }
 
-    return NextResponse.json({ success: true, count: transactions.length });
-  } catch (error) {
-    console.error("DB error:", error);
-    return NextResponse.json({ success: false, error: "Failed to import CSV" }, { status: 500 });
+      results.push({ index, success: true, id });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      results.push({ index, success: false, error: message });
+    }
   }
+
+  const successCount = results.filter((r) => r.success).length;
+  const failureCount = results.length - successCount;
+
+  return NextResponse.json({
+    success: failureCount === 0,
+    successCount,
+    failureCount,
+    count: transactions.length,
+    results,
+  });
 }

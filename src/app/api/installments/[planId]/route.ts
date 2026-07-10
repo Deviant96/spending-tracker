@@ -1,6 +1,6 @@
-// app/api/installments/[planId]/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { asRows } from "@/lib/mysql-types";
 
 /**
  * GET /api/installments/[planId]
@@ -11,7 +11,7 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ planId
     const { planId } = await params;
 
     // Get plan details
-    const [planRows] = await db.query(
+    const [planRowsRaw] = await db.query(
       `SELECT 
         p.id as plan_id,
         p.transaction_id,
@@ -35,8 +35,8 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ planId
       [planId]
     );
 
-    // @ts-ignore
-    if (!planRows || planRows.length === 0) {
+    const planRows = asRows(planRowsRaw);
+    if (planRows.length === 0) {
       return NextResponse.json({ error: "Installment plan not found" }, { status: 404 });
     }
 
@@ -56,7 +56,6 @@ export async function GET(_: NextRequest, { params }: { params: Promise<{ planId
       [planId]
     );
 
-    // @ts-ignore
     const plan = planRows[0];
     return NextResponse.json({
       success: true,
@@ -106,18 +105,17 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ pla
     await connection.beginTransaction();
     try {
       // Get transaction ID before deleting
-      const [planRows] = await connection.query(
+      const [planRowsRaw] = await connection.query(
         "SELECT transaction_id FROM installment_plans WHERE plan_id = ?",
         [planId]
       );
 
-      // @ts-ignore
-      if (!planRows || planRows.length === 0) {
+      const planRows = asRows(planRowsRaw);
+      if (planRows.length === 0) {
         throw new Error("Installment plan not found");
       }
 
-      // @ts-ignore
-      const transactionId = planRows[0].transaction_id;
+      const transactionId = String(planRows[0].transaction_id);
 
       // Delete schedule (cascades automatically via FK, but explicit for clarity)
       await connection.query("DELETE FROM installment_schedule WHERE plan_id = ?", [planId]);
@@ -142,10 +140,11 @@ export async function DELETE(_: NextRequest, { params }: { params: Promise<{ pla
     } finally {
       connection.release();
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error(err);
+    const message = err instanceof Error ? err.message : "Failed to delete installment plan";
     return NextResponse.json(
-      { error: err.message || "Failed to delete installment plan" },
+      { error: message },
       { status: 500 }
     );
   }

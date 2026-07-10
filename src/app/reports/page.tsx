@@ -24,15 +24,10 @@ export default function ReportsPage() {
   const [groupBy, setGroupBy] = useState<"month" | "year">("month");
   const [data, setData] = useState<ReportRow[]>([]);
 
-  const [loading, setLoading] = useState(false);
   const [loadingGroupedSpending, setLoadingGroupedSpending] = useState(false);
 
-  // New loading states for static resources
   const [loadingCategories, setLoadingCategories] = useState(false);
   const [loadingPaymentMethods, setLoadingPaymentMethods] = useState(false);
-
-  // convenience flag if needed
-  const loadingStatic = loadingCategories || loadingPaymentMethods;
 
   const [error, setError] = useState<string | null>(null);
   const [sortField, setSortField] = useState<SortField>("period");
@@ -52,8 +47,6 @@ export default function ReportsPage() {
     category: "all",
     paymentMethod: "all",
   });
-
-  console.log(filters);
 
   // Apply filters to data
   const filteredData = spendingData.filter((item: Transaction) => {
@@ -78,8 +71,6 @@ export default function ReportsPage() {
     (sum, item) => sum + item.amount,
     0
   );
-
-  const abortControllerRef = useRef<AbortController | null>(null);
 
   const sortData = useCallback(
     (data: ReportRow[]) => {
@@ -367,11 +358,11 @@ export default function ReportsPage() {
         </div>
       </section>
 
-      {loading && <div>Loading report data...</div>}
+      {loadingGroupedSpending && <div>Loading report data...</div>}
 
       {error && <div style={{ color: "red" }}>{error}</div>}
 
-      {!loading && !error && (
+      {!loadingGroupedSpending && !error && (
         <>
           <div>
             <section className="summary" style={{ marginBottom: "2rem" }}>

@@ -3,7 +3,6 @@
 import { Transaction } from "@/types";
 import { useState } from "react";
 import TransactionForm from "./TransactionForm";
-import { useTransactions } from "@/hooks/useTransactions";
 import { formatToRupiah } from "@/utils/currency";
 import { toCamelCase } from "@/utils/toCamelCase";
 import { Pencil, Trash2 } from "lucide-react";
@@ -21,17 +20,7 @@ export default function TransactionList({ transactions, onDelete, onEdit, isLoad
   const [dialogEditOpen, setDialogEditOpen] = useState<boolean>(false);
   const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
   const [isLoadingTransaction, setIsLoadingTransaction] = useState<boolean>(false);
-  const { getTransaction } = useTransactions();
   const [ singleTransaction, setSingleTransaction ] = useState<Transaction | undefined>(undefined);
-
-  const getSingleTransaction = (id: string) => {
-    if (id) {
-      const transaction = getTransaction(id);
-      setSingleTransaction(transaction ?? undefined);
-    } else {
-      setSingleTransaction(undefined);
-    }
-  }
 
   const handleDialogDeleteOpen = (id: string) => {
     setTransactionToDelete(id);
@@ -61,10 +50,8 @@ export default function TransactionList({ transactions, onDelete, onEdit, isLoad
   const handleDialogEditOpen = async (id: string) => {
     setDialogEditOpen(true);
     setIsLoadingTransaction(true);
-    console.log("Opening edit dialog for transaction ID:", id);
     try {
       const data = await getATransaction(id);
-      console.log("Fetched transaction data:", data?.data);
       if (data?.data) {
         setSingleTransaction(data.data);
       }

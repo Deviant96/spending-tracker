@@ -1,6 +1,6 @@
-// app/api/installments/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { asResultHeader, asRows } from "@/lib/mysql-types";
 
 type CanonicalScheduleStatus = "pending" | "paid" | "overdue";
 
@@ -115,7 +115,7 @@ export async function GET(req: NextRequest) {
       LEFT JOIN installment_schedule s ON p.id = s.plan_id
       WHERE 1=1
     `;
-    const params: any[] = [paidScheduleStatus];
+    const params: (string | number)[] = [paidScheduleStatus];
 
     if (transactionId) {
       query += " AND p.transaction_id = ?";
@@ -159,24 +159,23 @@ export async function POST(req: NextRequest) {
 
     try {
       // Check if transaction exists and is not already converted
-      const [txRows] = await connection.query(
+      const [txRowsRaw] = await connection.query(
         "SELECT id, amount, date, financing_status FROM transactions WHERE id = ?",
         [transactionId]
       );
       
-      // @ts-ignore
-      if (!txRows || txRows.length === 0) {
+      const txRows = asRows(txRowsRaw);
+      if (txRows.length === 0) {
         throw new Error("Transaction not found");
       }
 
-      // @ts-ignore
       const transaction = txRows[0];
-      if (transaction.financing_status === 'converted') {
+      if (transaction.financing_status === "converted") {
         throw new Error("Transaction already converted to installment");
       }
 
-      const principal = transaction.amount;
-      const startMonth = await resolveInstallmentStartMonthForDb(connection, transaction.date);
+      const principal = Number(transaction.amount);
+      const startMonth = await resolveInstallmentStartMonthForDb(connection, String(transaction.date));
 
       // Calculate monthly amounts
       const monthlyPrincipal = Math.floor(principal / months);
@@ -193,12 +192,11 @@ export async function POST(req: NextRequest) {
         [transactionId, principal, months, interestTotal, feesTotal, startMonth]
       );
       
-      // @ts-ignore
-      const planId = planResult.insertId;
+      const planId = asResultHeader(planResult).insertId;
 
       // Generate installment schedule
-      const scheduleValues = [];
-      let currentDate = new Date(transaction.date);
+      const scheduleValues: (string | number)[][] = [];
+      const currentDate = new Date(String(transaction.date));
       currentDate.setDate(1); // Set to 1st of month
 
       for (let i = 0; i < months; i++) {
@@ -254,10 +252,11 @@ export async function POST(req: NextRequest) {
     } finally {
       connection.release();
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error(err);
+    const message = err instanceof Error ? err.message : "Failed to create installment plan";
     return NextResponse.json(
-      { error: err.message || "Failed to create installment plan" },
+      { error: message },
       { status: 500 }
     );
   }

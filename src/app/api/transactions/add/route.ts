@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { asResultHeader } from "@/lib/mysql-types";
 import { randomUUID } from "crypto";
 
 function normalizeDateForSql(value: unknown): string | null {
@@ -226,12 +227,11 @@ export async function POST(req: NextRequest) {
           `INSERT INTO installment_plans (transaction_id, principal, months, interest_total, fees_total, start_month) VALUES (?, ?, ?, ?, ?, ?)`,
           [transactionId, amount, months, interest, fees, startMonth]
         );
-        // @ts-ignore
-        const planId = planResult.insertId;
+        const planId = asResultHeader(planResult).insertId;
 
         // Generate Schedule
-        const scheduleValues = [];
-        let currentDate = new Date(`${normalizedDate}T00:00:00`);
+        const scheduleValues: (string | number)[][] = [];
+        const currentDate = new Date(`${normalizedDate}T00:00:00`);
         // Set to 1st of month to avoid edge cases like Jan 31 -> Feb 28/29
         currentDate.setDate(1);
 

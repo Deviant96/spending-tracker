@@ -75,7 +75,7 @@ export async function GET(req: NextRequest) {
     }
 
     let sql = "";
-    const params: any[] = [];
+    const params: (string | number)[] = [];
 
     if (mode === "cashflow" && period === "monthly") {
       // CASHFLOW VIEW: Exclude converted transactions, include installment schedule payments
@@ -85,8 +85,8 @@ export async function GET(req: NextRequest) {
       
       const txWhere = ["t.financing_status != 'converted'"]; // Exclude converted transactions
       const schWhere = ["s.status IN (?, ?)"]; // Include pending and paid installments
-      const txParams: any[] = [];
-      const schParams: any[] = [pendingScheduleStatus, paidScheduleStatus];
+      const txParams: (string | number)[] = [];
+      const schParams: (string | number)[] = [pendingScheduleStatus, paidScheduleStatus];
 
       if (start && end) {
         txWhere.push("t.date BETWEEN ? AND ?");
