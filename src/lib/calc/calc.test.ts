@@ -126,8 +126,11 @@ describe("anomalies + classify", () => {
     const anomalies = detectAnomalies([
       { id: "1", date: "2026-07-01", amount: 100, category: "Food" },
       { id: "2", date: "2026-07-02", amount: 110, category: "Food" },
-      { id: "3", date: "2026-07-03", amount: 120, category: "Food" },
-      { id: "4", date: "2026-07-04", amount: 5000, category: "Electronics", notes: "Laptop" },
+      { id: "3", date: "2026-07-03", amount: 90, category: "Food" },
+      { id: "4", date: "2026-07-04", amount: 95, category: "Food" },
+      { id: "5", date: "2026-07-05", amount: 105, category: "Food" },
+      { id: "6", date: "2026-07-06", amount: 100, category: "Food" },
+      { id: "7", date: "2026-07-07", amount: 50000, category: "Electronics", notes: "Laptop" },
     ]);
     expect(anomalies.some((a) => a.type === "spike")).toBe(true);
 
