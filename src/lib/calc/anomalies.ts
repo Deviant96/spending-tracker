@@ -21,38 +21,45 @@ function mean(nums: number[]): number {
   return nums.reduce((a, b) => a + b, 0) / nums.length;
 }
 
-function stddev(nums: number[]): number {
-  if (nums.length < 2) return 0;
-  const m = mean(nums);
-  const v = nums.reduce((s, n) => s + (n - m) ** 2, 0) / nums.length;
-  return Math.sqrt(v);
-}
-
 export function detectAnomalies(
   transactions: SpendingPoint[],
   options?: {
     spikeZScore?: number;
+    spikeMultiplier?: number;
     duplicateWindowDays?: number;
     categoryDriftRatio?: number;
   }
 ): Anomaly[] {
-  const spikeZ = options?.spikeZScore ?? 2.5;
+  const spikeZ = options?.spikeZScore ?? 3;
+  const spikeMultiplier = options?.spikeMultiplier ?? 5;
   const dupDays = options?.duplicateWindowDays ?? 3;
   const driftRatio = options?.categoryDriftRatio ?? 1.8;
   const anomalies: Anomaly[] = [];
 
-  const amounts = transactions.map((t) => t.amount);
-  const m = mean(amounts);
-  const sd = stddev(amounts);
+  const amounts = transactions.map((t) => t.amount).sort((a, b) => a - b);
+  const median = amounts.length
+    ? amounts.length % 2 === 0
+      ? (amounts[amounts.length / 2 - 1] + amounts[amounts.length / 2]) / 2
+      : amounts[Math.floor(amounts.length / 2)]
+    : 0;
+  const absDevs = amounts.map((a) => Math.abs(a - median)).sort((a, b) => a - b);
+  const mad = absDevs.length
+    ? absDevs.length % 2 === 0
+      ? (absDevs[absDevs.length / 2 - 1] + absDevs[absDevs.length / 2]) / 2
+      : absDevs[Math.floor(absDevs.length / 2)]
+    : 0;
+  const robustScale = mad > 0 ? mad * 1.4826 : mean(amounts.filter((a) => a <= median * 2 || median === 0)) || 1;
 
   for (const t of transactions) {
-    if (sd > 0 && (t.amount - m) / sd >= spikeZ && t.amount > m) {
+    const modifiedZ = mad > 0 ? (0.6745 * (t.amount - median)) / mad : (t.amount - median) / robustScale;
+    const vsMedian = median > 0 && t.amount >= median * spikeMultiplier;
+    if ((modifiedZ >= spikeZ || vsMedian) && t.amount > median) {
       anomalies.push({
         id: `spike-${t.id}`,
         type: "spike",
-        severity: t.amount > m + 3 * sd ? "high" : "medium",
+        severity: t.amount >= median * 10 ? "high" : "medium",
         title: "Unusual spending spike",
-        detail: `${t.notes || t.category || "A transaction"} of ${t.amount} is significantly above your typical ~${Math.round(m)}.`,
+        detail: `${t.notes || t.category || "A transaction"} of ${t.amount} is significantly above your typical ~${Math.round(median)}.`,
         relatedIds: [t.id],
         amount: t.amount,
       });
