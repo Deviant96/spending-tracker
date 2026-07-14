@@ -88,3 +88,11 @@ export type Filters = {
   year: string | null;
   search: string;
 };
+
+export type Budget = {
+  id?: number;
+  categoryId: number;
+  categoryName?: string;
+  month: string;
+  amount: number;
+};
