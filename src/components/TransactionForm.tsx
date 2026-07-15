@@ -20,9 +20,13 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import DatePicker from "./ui/DatePicker";
 import { Skeleton } from "./ui/skeleton";
+<<<<<<< HEAD
 import FieldError from "./FieldError";
 
 const NONE_VALUE = "__none__";
+=======
+import InstallmentCalcPreview from "./calc/InstallmentCalcPreview";
+>>>>>>> bfaa0fa4476117a09888e1162b229d67eaeecf79
 
 const transactionSchema = z
   .object({
@@ -117,6 +121,11 @@ export default function TransactionForm({
 
   const isInstallment = watch("isInstallment");
   const isSubscription = watch("isSubscription");
+  const watchedAmount = watch("amount");
+  const watchedMonths = watch("installmentMonths");
+  const watchedInterest = watch("interestTotal");
+  const watchedFees = watch("feesTotal");
+  const watchedDate = watch("date");
 
   const toLocalDateString = (date: Date): string => {
     const year = date.getFullYear();
@@ -514,6 +523,15 @@ export default function TransactionForm({
                     return Number.isNaN(parsed) ? undefined : parsed;
                   },
                 })}
+              />
+            </div>
+            <div className="col-span-2">
+              <InstallmentCalcPreview
+                principal={Number(watchedAmount) || 0}
+                months={Number(watchedMonths) || 0}
+                interestTotal={Number(watchedInterest) || 0}
+                feesTotal={Number(watchedFees) || 0}
+                startDate={watchedDate}
               />
             </div>
           </div>
