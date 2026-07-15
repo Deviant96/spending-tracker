@@ -1,3 +1,5 @@
+"use client";
+
 type FeedbackBannerProps = {
   type: "success" | "error";
   message: string;
@@ -13,7 +15,7 @@ export default function FeedbackBanner({ type, message, onDismiss }: FeedbackBan
   return (
     <div
       role={type === "error" ? "alert" : "status"}
-      className={`mb-5 flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between ${styles}`}
+      className={`mb-5 flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-center sm:justify-between animate-in fade-in-0 slide-in-from-top-1 duration-200 ${styles}`}
     >
       <span className="text-sm font-medium">{message}</span>
       {onDismiss && (

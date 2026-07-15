@@ -31,8 +31,20 @@ export async function POST(req: NextRequest) {
 
     const normalizedDate = normalizeDateForSql(date);
     if (!normalizedDate) {
-      return NextResponse.json({ error: "Invalid date format" }, { status: 400 });
+      return NextResponse.json({ error: "Date is required and must be a valid date" }, { status: 400 });
     }
+
+    const parsedAmount = Number(amount);
+    if (!Number.isFinite(parsedAmount) || parsedAmount < 1) {
+      return NextResponse.json({ error: "Amount is required and must be greater than 0" }, { status: 400 });
+    }
+
+    const normalizedCategoryId =
+      categoryId === "" || categoryId == null || Number.isNaN(Number(categoryId))
+        ? null
+        : Number(categoryId);
+    const normalizedMethodId =
+      methodId === "" || methodId == null ? null : methodId;
 
     const connection = await db.getConnection();
     await connection.beginTransaction();
@@ -56,9 +68,9 @@ export async function POST(req: NextRequest) {
           [
             transactionId,
             normalizedDate,
-            amount,
-            categoryId,
-            methodId,
+            parsedAmount,
+            normalizedCategoryId,
+            normalizedMethodId,
             notes || null,
             isSubscription ? 1 : 0,
             subscriptionInterval || null,
@@ -73,9 +85,9 @@ export async function POST(req: NextRequest) {
           [
             transactionId,
             normalizedDate,
-            amount,
-            categoryId,
-            methodId,
+            parsedAmount,
+            normalizedCategoryId,
+            normalizedMethodId,
             notes || null,
             isSubscription ? 1 : 0,
             subscriptionInterval || null,
@@ -93,14 +105,14 @@ export async function POST(req: NextRequest) {
 
         const [planResult] = await connection.query(
           `INSERT INTO installment_plans (transaction_id, principal, months, interest_total, fees_total, start_month) VALUES (?, ?, ?, ?, ?, ?)`,
-          [transactionId, amount, months, interest, fees, startMonth]
+          [transactionId, parsedAmount, months, interest, fees, startMonth]
         );
         const planId = asResultHeader(planResult).insertId;
 
         const scheduleValues = generateInstallmentScheduleValues({
           planId,
           months,
-          principal: Number(amount),
+          principal: parsedAmount,
           interestTotal: interest,
           feesTotal: fees,
           startDate: normalizedDate,

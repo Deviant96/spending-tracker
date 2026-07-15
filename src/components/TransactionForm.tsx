@@ -20,14 +20,23 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import DatePicker from "./ui/DatePicker";
 import { Skeleton } from "./ui/skeleton";
+import FieldError from "./FieldError";
+
+const NONE_VALUE = "__none__";
 
 const transactionSchema = z
   .object({
     id: z.string().uuid(),
-    date: z.string().nullable(),
-    amount: z.number().min(1, "Amount must be greater than 0"),
-    categoryId: z.string().nonempty("Category is required"),
-    methodId: z.string().nonempty("Payment method is required"),
+    date: z
+      .string({ error: "Date is required" })
+      .min(1, "Date is required")
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be a valid date"),
+    amount: z
+      .number({ error: "Amount is required" })
+      .refine((value) => !Number.isNaN(value), { message: "Amount is required" })
+      .min(1, "Amount must be greater than 0"),
+    categoryId: z.string().optional(),
+    methodId: z.string().optional(),
     notes: z.string().optional(),
     isInstallment: z.boolean(),
     installmentMonths: z.number().optional(),
@@ -39,18 +48,39 @@ const transactionSchema = z
   .refine((data) => !(data.isInstallment && data.isSubscription), {
     message: "A transaction cannot be both an installment and a subscription",
     path: ["isSubscription"],
-  });
+  })
+  .refine(
+    (data) => !data.isInstallment || (data.installmentMonths != null && data.installmentMonths > 1),
+    {
+      message: "Installment months must be greater than 1",
+      path: ["installmentMonths"],
+    }
+  )
+  .refine(
+    (data) => !data.isSubscription || Boolean(data.subscriptionInterval),
+    {
+      message: "Subscription interval is required",
+      path: ["subscriptionInterval"],
+    }
+  );
 
 type TransactionFormValues = z.infer<typeof transactionSchema>;
 
 type Props = {
-  onSubmit: (t: Transaction) => void | Promise<void>;
+  onSubmit: (t: Transaction) => boolean | void | Promise<boolean | void>;
   initialTransaction?: Transaction | null;
+  /** After a successful add, keep the date and clear other fields for the next entry. */
+  keepDateAfterSubmit?: boolean;
 };
 
-export default function TransactionForm({ onSubmit, initialTransaction }: Props) {
+export default function TransactionForm({
+  onSubmit,
+  initialTransaction,
+  keepDateAfterSubmit = false,
+}: Props) {
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [isLoadingPaymentMethods, setIsLoadingPaymentMethods] = useState<boolean>(false);
   const [isLoadingCategories, setIsLoadingCategories] = useState<boolean>(false);
@@ -71,8 +101,8 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
     shouldUnregister: true,
     defaultValues: {
       id: initialTransaction?.id ?? crypto.randomUUID(),
-      date: initialTransaction?.date ?? null,
-      amount: initialTransaction?.amount ?? 0,
+      date: initialTransaction?.date ?? "",
+      amount: initialTransaction?.amount ?? undefined,
       categoryId: initialTransaction?.categoryId?.toString() ?? undefined,
       methodId: initialTransaction?.methodId?.toString() ?? undefined,
       notes: initialTransaction?.notes ?? undefined,
@@ -111,7 +141,7 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
 
       reset({
         id: initialTransaction.id,
-        date: initialTransaction.date ?? null,
+        date: initialTransaction.date ?? "",
         amount: Number(initialTransaction.amount ?? 0),
         categoryId,
         methodId,
@@ -125,6 +155,30 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
       });
     }
   }, [initialTransaction, reset]);
+
+  const amountInputRef = useRef<HTMLInputElement | null>(null);
+
+  const resetForNextEntry = (preservedDate: string) => {
+    reset({
+      id: crypto.randomUUID(),
+      date: preservedDate,
+      amount: undefined,
+      categoryId: undefined,
+      methodId: undefined,
+      notes: "",
+      isInstallment: false,
+      installmentMonths: undefined,
+      interestTotal: undefined,
+      feesTotal: undefined,
+      isSubscription: false,
+      subscriptionInterval: undefined,
+    });
+
+    requestAnimationFrame(() => {
+      amountInputRef.current?.focus();
+      amountInputRef.current?.select();
+    });
+  };
 
   useEffect(() => {
     if (!initialTransaction) return;
@@ -169,21 +223,30 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
     }
   }, [categories, paymentMethods, initialTransaction, setValue]);
 
-  const onSubmitHandler = (data: TransactionFormValues) => {
-    onSubmit({
-      id: data.id,
-      date: data.date || "",
-      amount: data.amount,
-      categoryId: Number(data.categoryId),
-      methodId: data.methodId,
-      notes: data.notes,
-      isInstallment: data.isInstallment,
-      installmentMonths: data.installmentMonths,
-      interestTotal: data.interestTotal,
-      feesTotal: data.feesTotal,
-      isSubscription: data.isSubscription,
-      subscriptionInterval: data.subscriptionInterval,
-    });
+  const onSubmitHandler = async (data: TransactionFormValues) => {
+    setIsSubmitting(true);
+    try {
+      const result = await onSubmit({
+        id: data.id,
+        date: data.date,
+        amount: data.amount,
+        categoryId: data.categoryId ? Number(data.categoryId) : undefined,
+        methodId: data.methodId || undefined,
+        notes: data.notes,
+        isInstallment: data.isInstallment,
+        installmentMonths: data.installmentMonths,
+        interestTotal: data.interestTotal,
+        feesTotal: data.feesTotal,
+        isSubscription: data.isSubscription,
+        subscriptionInterval: data.subscriptionInterval,
+      });
+
+      if (keepDateAfterSubmit && result !== false) {
+        resetForNextEntry(data.date);
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const onError = (formErrors: FieldErrors<TransactionFormValues>) => {
@@ -239,6 +302,14 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
     }
   }, []);
 
+  const amountField = register("amount", {
+    setValueAs: (value) => {
+      if (value === "" || value === null || value === undefined) return undefined;
+      const parsed = Number(value);
+      return Number.isNaN(parsed) ? undefined : parsed;
+    },
+  });
+
   return (
     <form
       onSubmit={handleSubmit(onSubmitHandler, onError)}
@@ -246,24 +317,10 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
     >
       <Input type="hidden" {...register("id")} />
 
-      {/* Debug: Show validation errors */}
-      {Object.keys(errors).length > 0 && (
-        <div className="p-4 bg-red-100 border border-red-400 text-red-700 rounded">
-          <h3 className="font-bold">Validation Errors:</h3>
-          <ul className="list-disc ml-5">
-            {Object.entries(errors).map(([field, error]) => (
-              <li key={field}>
-                {field}: {error?.message || "Invalid"}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
       {/* Date */}
       <div className="flex flex-col gap-2">
         <Label htmlFor="date" className="px-1">
-          Date
+          Date <span className="text-red-500">*</span>
         </Label>
         <Controller
           name="date"
@@ -271,28 +328,36 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
           render={({ field }) => (
             <DatePicker
               id="date"
-              value={field.value}
+              value={field.value || null}
               placeholder="Select a date"
               helperText="MM/DD/YYYY"
-              onDateChange={(date) => field.onChange(date ? toLocalDateString(date) : null)}
+              onDateChange={(date) => field.onChange(date ? toLocalDateString(date) : "")}
               autoFocus
               showTodayButton
             />
           )}
         />
-        {errors.date && <span>{errors.date.message}</span>}
+        <FieldError message={errors.date?.message} />
       </div>
 
       {/* Amount */}
       <div className="flex flex-col gap-2">
-        <Label htmlFor="amount">Amount</Label>
+        <Label htmlFor="amount">
+          Amount <span className="text-red-500">*</span>
+        </Label>
         <Input
           id="amount"
           type="number"
           onFocus={(e) => e.target.select()}
-          {...register("amount", { valueAsNumber: true })}
+          name={amountField.name}
+          onBlur={amountField.onBlur}
+          onChange={amountField.onChange}
+          ref={(element) => {
+            amountField.ref(element);
+            amountInputRef.current = element;
+          }}
         />
-        {errors.amount && <span>{errors.amount.message}</span>}
+        <FieldError message={errors.amount?.message} />
         <small 
           style={{ 
             display: "block", 
@@ -312,18 +377,19 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
           name="categoryId"
           control={control}
           render={({ field }) => (
-            <Select 
-              onValueChange={field.onChange} 
-              value={field.value ? String(field.value) : undefined}
+            <Select
+              onValueChange={(value) => field.onChange(value === NONE_VALUE ? undefined : value)}
+              value={field.value ? String(field.value) : NONE_VALUE}
             >
               {isLoadingCategories ? (
                 <Skeleton className="h-[36px] w-full rounded-full" />
               ) : (
                 <>
                 <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select a category" />
+                  <SelectValue placeholder="Select a category (optional)" />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value={NONE_VALUE}>None</SelectItem>
                   {categories.map((category) => (
                     <SelectItem key={category.id} value={String(category.id)}>
                       {category.name}
@@ -335,7 +401,6 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
             </Select>
           )}
         />
-        {errors.categoryId && <span>{errors.categoryId.message}</span>}
       </div>
 
       {/* Payment Method */}
@@ -345,15 +410,19 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
           name="methodId"
           control={control}
           render={({ field }) => (
-            <Select onValueChange={field.onChange} value={field.value ? String(field.value) : undefined}>
+            <Select
+              onValueChange={(value) => field.onChange(value === NONE_VALUE ? undefined : value)}
+              value={field.value ? String(field.value) : NONE_VALUE}
+            >
               {isLoadingPaymentMethods ? (
                 <Skeleton className="h-[36px] w-full rounded-full" />
               ) : (
                 <>
-              <SelectTrigger>
-                <SelectValue placeholder="Select a payment method" />
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select a payment method (optional)" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value={NONE_VALUE}>None</SelectItem>
                 {paymentMethods.map((method) => (
                   <SelectItem key={method.id} value={String(method.id)}>
                     {method.name}
@@ -365,14 +434,13 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
             </Select>
           )}
         />
-        {errors.methodId && <span>{errors.methodId.message}</span>}
       </div>
 
       {/* Notes */}
       <div className="flex flex-col gap-2">
         <Label htmlFor="notes">Notes</Label>
         <Input id="notes" type="text" {...register("notes")} />
-        {errors.notes && <span>{errors.notes.message}</span>}
+        <FieldError message={errors.notes?.message} />
       </div>
 
       {/* Is Installment */}
@@ -415,11 +483,7 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
                   },
                 })}
               />
-              {errors.installmentMonths && (
-                <p className="text-sm text-red-500">
-                  {errors.installmentMonths.message}
-                </p>
-              )}
+              <FieldError message={errors.installmentMonths?.message} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="interestTotal">Total Interest</Label>
@@ -435,11 +499,7 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
                   },
                 })}
               />
-              {errors.interestTotal && (
-                <p className="text-sm text-red-500">
-                  {errors.interestTotal.message}
-                </p>
-              )}
+              <FieldError message={errors.interestTotal?.message} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="feesTotal">Total Fees (Optional)</Label>
@@ -504,12 +564,20 @@ export default function TransactionForm({ onSubmit, initialTransaction }: Props)
                 </Select>
               )}
             />
+            <FieldError message={errors.subscriptionInterval?.message} />
           </div>
         )}
+        <FieldError message={errors.isSubscription?.message} />
       </div>
 
-      <Button type="submit">
-        {initialTransaction ? "Update" : "Save"}
+      <Button type="submit" disabled={isSubmitting}>
+        {isSubmitting
+          ? "Saving..."
+          : initialTransaction
+            ? "Update"
+            : keepDateAfterSubmit
+              ? "Save & Add Another"
+              : "Save"}
       </Button>
     </form>
   );
