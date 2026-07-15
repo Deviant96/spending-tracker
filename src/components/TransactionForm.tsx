@@ -20,13 +20,10 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import DatePicker from "./ui/DatePicker";
 import { Skeleton } from "./ui/skeleton";
-<<<<<<< HEAD
 import FieldError from "./FieldError";
+import InstallmentCalcPreview from "./calc/InstallmentCalcPreview";
 
 const NONE_VALUE = "__none__";
-=======
-import InstallmentCalcPreview from "./calc/InstallmentCalcPreview";
->>>>>>> bfaa0fa4476117a09888e1162b229d67eaeecf79
 
 const transactionSchema = z
   .object({
